@@ -4,6 +4,17 @@ All notable changes to KiPI, newest first. Each minor version is one development
 The code's version number went from 0.1.0 straight to 0.5.0, so 0.2.0 to 0.4.0 name
 milestones rather than versions that were ever set.
 
+## 0.7.1 (in development)
+
+### Added
+- **Save and open AC results** (#56). *Save results…* in the AC panel writes every rail
+  solved so far to a `.kipi-ac-results` file. In AC mode, the toolbar's *Open results…*
+  (DC only before) reopens it without solving again: each rail's curves and table come
+  back under its VRM, and the HTML report link where the report still exists. Rails
+  whose VRM is no longer in the setup are left out and logged.
+- DC and AC results files are marked with their kind, and opening one in the wrong mode
+  says which mode it belongs to. DC files from earlier versions still open.
+
 ## 0.7.0 (in development): AC impedance analysis, faster solves
 
 ### Added

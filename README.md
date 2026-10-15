@@ -407,7 +407,9 @@ probe's |Z| at that frequency. The results table gives each probe's minimum and 
 (closest to, or furthest over, the target) and PASS/FAIL; the notes list the capacitors that
 were left out for having no model. Each rail keeps its last result, so switching **Rail** shows
 another rail's curves without solving again. **Export CSV…** writes |Z|, R and X at every
-frequency.
+frequency. **Save results…** writes every solved rail to a `.kipi-ac-results` file, which
+**Open results…** reloads in AC mode (load the board first; like DC results files, these are
+pickles, so only open ones you created).
 
 Tick **HTML report** next to **Solve rail** to also write `<board>_<rail>_ac_report.html`
 next to the board after each solve; **Report** opens it. Like the DC report, it is one
