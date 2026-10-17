@@ -14,6 +14,7 @@ def main() -> int:
     from kipi.gui import app as kipi_app
     from kipi.gui.app import run, setup_logging
     from kipi.sources.kicad_ipc.extract import ExtractionError, connect
+    from kipi.sources.kicad_ipc.source import InstalledKiCad, KiCadLiveSource
     from kipi.core.progress import ProgressReporter
 
     setup_logging(console=False)
@@ -35,7 +36,8 @@ def main() -> int:
             _app = make_app()  # must outlive the box
             QMessageBox.critical(None, "KiPI", f"{e}\n\nLog: {kipi_app.LOG_PATH}")
             return 1
-        return run(kicad=kicad, board=board, instance=instance)
+        source = KiCadLiveSource(kicad, board)
+        return run(source=source, tool=InstalledKiCad(source), instance=instance)
     finally:
         instance.release()
 

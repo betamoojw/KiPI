@@ -15,16 +15,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "kipi"
 
-# Modules (as paths relative to the repository) that may import the KiCad source.
+# Modules (as paths relative to the repository) that may import the KiCad source: the
+# entry points, which pick where boards come from and hand that to the window.
 KICAD_SOURCE_USERS = {
     "kipi_entry.py",
     "kipi/__main__.py",
-    "kipi/gui/app.py",
-}
-# MainWindow still drives KiCad itself; it goes through BoardSource next (issue #45, M1
-# step 3), and these exceptions go with it.
-NOT_YET_SEPARATED = {
-    "kipi/gui/main_window.py",
 }
 
 
@@ -79,8 +74,7 @@ def test_the_scan_sees_imports():
 
 def test_only_the_kicad_source_imports_kipy():
     def rule(rel, module):
-        return (_under(module, "kipy") and not rel.startswith("kipi/sources/kicad_ipc/")
-                and rel not in NOT_YET_SEPARATED)
+        return _under(module, "kipy") and not rel.startswith("kipi/sources/kicad_ipc/")
     assert _violations(rule) == []
 
 
@@ -103,5 +97,12 @@ def test_only_entry_points_pick_the_kicad_source():
     def rule(rel, module):
         return (_under(module, "kipi.sources.kicad_ipc")
                 and not rel.startswith("kipi/sources/")
-                and rel not in KICAD_SOURCE_USERS | NOT_YET_SEPARATED)
+                and rel not in KICAD_SOURCE_USERS)
+    assert _violations(rule) == []
+
+
+def test_the_gui_sees_only_source_interfaces():
+    def rule(rel, module):
+        return (rel.startswith("kipi/gui/") and _under(module, "kipi.sources")
+                and module != "kipi.sources" and not _under(module, "kipi.sources.base"))
     assert _violations(rule) == []

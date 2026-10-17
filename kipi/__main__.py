@@ -45,7 +45,11 @@ def main(argv=None) -> int:
         if args.snapshot:
             from kipi.gui.app import run
             from kipi.core.model.snapshot_io import load
-            return run(snapshot=load(args.snapshot), instance=instance)
+            from kipi.sources.kicad_ipc.source import InstalledKiCad, KiCadLiveSource
+            # Load from KiCad still works: it connects on first use.
+            source = KiCadLiveSource()
+            return run(source=source, tool=InstalledKiCad(source),
+                       snapshot=load(args.snapshot), instance=instance)
         return _run_live(instance)
     finally:
         instance.release()
@@ -54,13 +58,15 @@ def main(argv=None) -> int:
 def _run_live(instance) -> int:
     from kipi.gui.app import run
     from kipi.sources.kicad_ipc.extract import ExtractionError, connect
+    from kipi.sources.kicad_ipc.source import InstalledKiCad, KiCadLiveSource
     from kipi.core.progress import ProgressReporter
     try:
         kicad, board = connect(progress=ProgressReporter())
     except ExtractionError as e:
         print(e, file=sys.stderr)
         return 1
-    return run(kicad=kicad, board=board, instance=instance)
+    source = KiCadLiveSource(kicad, board)
+    return run(source=source, tool=InstalledKiCad(source), instance=instance)
 
 
 if __name__ == "__main__":

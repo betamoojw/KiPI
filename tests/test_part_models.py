@@ -129,8 +129,9 @@ def test_merged_models_keep_colors_and_normals_only_if_all_have_them():
 
 def _window(no_3d, monkeypatch, nets=("VOUT",), found=None, cli=("no-such-kicad-cli",)):
     from kipi.sources.kicad_ipc import models3d
+    from kipi.sources.kicad_ipc.source import InstalledKiCad
     from kipi.gui.main_window import MainWindow
-    w = MainWindow()
+    w = MainWindow(tool=InstalledKiCad())
     w.snapshot = board()
     w.solve_panel.setup = two_phase()
     monkeypatch.setattr(w, "_checked_set", lambda: frozenset(nets))

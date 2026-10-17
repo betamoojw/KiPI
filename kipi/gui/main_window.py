@@ -28,6 +28,7 @@ from kipi.dc.gui.pi_panel import PIPanel
 from kipi.dc.pi.tree import fmt_drop
 from kipi.gui.viewer3d import Viewer3D
 from kipi.gui.worker import QtProgress, Task
+from kipi.sources.base import BoardSource, InstalledTool
 
 log = logging.getLogger("kipi")
 
@@ -40,12 +41,16 @@ VIA_PICK_PX = 10      # a click this close to a via barrel on screen selects it
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, kicad=None, board=None, snapshot: Optional[BoardSnapshot] = None):
+    def __init__(self, source: Optional[BoardSource] = None, tool: Optional[InstalledTool] = None,
+                 snapshot: Optional[BoardSnapshot] = None):
+        """``source`` is where Load reads the board from (None: only snapshots are opened);
+        ``tool`` the design tool on this computer that gives layer colors and part models
+        (None: KiPI's own colors, no models)."""
         super().__init__()
         self.setWindowTitle(f"KiPI {__version__} — Power Integrity")
         self.resize(1500, 950)
-        self._kicad = kicad
-        self._board = board
+        self._source = source
+        self._tool = tool or InstalledTool()
         self.snapshot: Optional[BoardSnapshot] = None
         self._copper_cache: Dict[str, Dict[int, object]] = {}
         self._task: Optional[Task] = None
@@ -69,9 +74,7 @@ class MainWindow(QMainWindow):
         self._model_task: Optional[Task] = None
         self._model_gen = 0                 # bumped per board; stale loads are dropped
         self._models_pending = False        # wanted parts changed while a load ran
-        self._model_source = None           # (kicad-cli, board file), False if unusable
-        self._kicad_cli = None              # found once per session
-        self._cli_looked = False
+        self._model_source = None           # the board's ModelProvider, False if none
         self._closed = False
         self._layer_colors_from = None      # where the layer colors were last read from
         self._model_timer = QTimer(self)    # coalesce setup edits into one update
@@ -103,8 +106,8 @@ class MainWindow(QMainWindow):
 
         if snapshot is not None:
             QTimer.singleShot(0, lambda: self._set_snapshot(snapshot))
-        elif board is not None:
-            QTimer.singleShot(0, self.load_from_kicad)
+        elif source is not None:
+            QTimer.singleShot(0, self.reload_board)
 
     # ================================================================== UI
     def _build_toolbar(self):
@@ -119,11 +122,18 @@ class MainWindow(QMainWindow):
             tb.addAction(a)
             return a
 
-        self.act_reload = act("Load from KiCad", self.load_from_kicad,
-                              "Re-read the board from the running KiCad PCB editor")
+        src = self._source
+        self.act_reload = act(f"Load from {src.name}" if src else "Load",
+                              self.reload_board,
+                              f"Re-read the board from {src.description}" if src
+                              else "Re-read the board")
+        self.act_reload.setVisible(src is not None and src.caps.reload)
         self.chk_refill = QCheckBox("Refill zones", self)
-        self.chk_refill.setToolTip("Refill all zones in KiCad before reading (recommended)")
-        tb.addWidget(self.chk_refill)
+        self.chk_refill.setToolTip(f"Refill all zones in {src.name if src else 'the editor'} "
+                                   "before reading (recommended)")
+        # A toolbar widget is shown and hidden through the action holding it.
+        self._act_refill = tb.addWidget(self.chk_refill)
+        self._act_refill.setVisible(src is not None and src.caps.refill_zones)
         tb.addSeparator()
         act("Open snapshot…", self.open_snapshot,
             "Load a saved board snapshot (.json / .json.gz), without KiCad running")
@@ -362,12 +372,15 @@ class MainWindow(QMainWindow):
         self.info.setOpenExternalLinks(False)
         self.info.setToolTip("What you last clicked in the 3D view, or the impedance "
                              "plot's cursor values")
-        self.btn_select_kicad = QPushButton("Select in KiCad", g_info)
-        self.btn_select_kicad.setEnabled(False)
-        self.btn_select_kicad.setToolTip("Select the picked pad or via in the KiCad PCB editor")
-        self.btn_select_kicad.clicked.connect(self._select_in_kicad)
+        src = self._source
+        self.btn_select = QPushButton(f"Select in {src.name}" if src else "Select", g_info)
+        self.btn_select.setEnabled(False)
+        self.btn_select.setToolTip("Select the picked pad or via in "
+                                   f"{src.description if src else 'the editor'}")
+        self.btn_select.clicked.connect(self._select_in_source)
+        self.btn_select.setVisible(src is not None and src.caps.select_items)
         li.addWidget(self.info, 1)
-        li.addWidget(self.btn_select_kicad)
+        li.addWidget(self.btn_select)
 
         split = QSplitter(Qt.Vertical, panel)
         for w in (g_nets, g_layers, g_view, g_info):
@@ -547,22 +560,14 @@ class MainWindow(QMainWindow):
             self._task.progress.cancel()
 
     # ===================================================== board loading
-    def load_from_kicad(self):
-        refill = self.chk_refill.isChecked()
-
-        def work(progress):
-            from kipi.sources.kicad_ipc.extract import connect, extract_board, require_single_kicad
-            require_single_kicad()     # a second KiCad may have been opened since the last load
-            if self._board is None:
-                self._kicad, self._board = connect(progress=progress)
-            snap = extract_board(self._board, refill_zones=refill, progress=progress)
-            try:
-                snap.kicad_version = str(self._kicad.get_version())
-            except Exception:  # noqa: BLE001
-                pass
-            return snap
-
-        self._run(work, self._set_snapshot, "Loading board")
+    def reload_board(self):
+        """Read the board from the source again (Load from KiCad)."""
+        source = self._source
+        if source is None:
+            return
+        refill = source.caps.refill_zones and self.chk_refill.isChecked()
+        self._run(lambda progress: source.load(progress, refill_zones=refill),
+                  self._set_snapshot, "Loading board")
 
     def open_snapshot(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open board snapshot", "",
@@ -607,7 +612,7 @@ class MainWindow(QMainWindow):
         self._model_gen += 1
         self._model_source = None
         self._picked = None
-        self.btn_select_kicad.setEnabled(False)
+        self.btn_select.setEnabled(False)
         self.setWindowTitle(f"KiPI {__version__} — {snap.board_name}")
         self._load_layer_colors(snap)
         self._populate_layers()
@@ -624,9 +629,8 @@ class MainWindow(QMainWindow):
     def _load_layer_colors(self, snap: BoardSnapshot):
         """Color the copper layers like the PCB editor's color theme, read again on every
         load so a theme changed in KiCad shows after Load from KiCad."""
-        from kipi.sources.kicad_ipc.colors import copper_theme
         from kipi.core.viz.meshes import set_layer_colors
-        colors, source = copper_theme(snap.kicad_version)
+        colors, source = self._tool.layer_colors(snap)
         set_layer_colors(colors)
         if source != self._layer_colors_from:
             self._layer_colors_from = source
@@ -838,40 +842,27 @@ class MainWindow(QMainWindow):
         self.viewer.set_models(shown, snap.stackup.board_thickness_mm)
 
     def _models_source(self):
-        """``(kicad-cli, board file)``, or False (said once per board) if either is
-        missing."""
+        """The board's :class:`~kipi.sources.base.ModelProvider`, or False (and why, said
+        once per board) if it has none."""
         if self._model_source is None:
-            from kipi.sources.kicad_ipc import models3d
-            if not self._cli_looked:
-                self._cli_looked = True
-                self._kicad_cli = models3d.find_kicad_cli(self._kicad)
-            board = models3d.board_file(self.snapshot)
-            if self._kicad_cli is None:
-                self.log("3D models are read with KiCad's kicad-cli, which KiPI could not "
-                         f"find; set {models3d.CLI_ENV} to its path to show them",
-                         logging.WARNING)
-            elif board is None:
-                self.log(f"3D models: the board file {self.snapshot.board_name} was not "
-                         "found next to the project, so no models are shown",
-                         logging.WARNING)
-            self._model_source = ((self._kicad_cli, board)
-                                  if self._kicad_cli and board else False)
+            provider, why = self._tool.part_models(self.snapshot)
+            if provider is None and why:
+                self.log(why, logging.WARNING)
+            self._model_source = provider or False
         return self._model_source
 
     def _load_models(self, refs: List[str]):
-        source = self._models_source()
-        if not source:
+        provider = self._models_source()
+        if not provider:
             self._model_cache.update({r: None for r in refs})
             return
-        cli, board = source
         gen = self._model_gen
 
         def work(progress):
-            from kipi.sources.kicad_ipc.models3d import load_models
             from kipi.core.progress import Canceled
-            progress.info(f"Loading 3D models of {len(refs)} part(s) with kicad-cli")
+            progress.info(f"Loading 3D models of {len(refs)} part(s) with {provider.label}")
             try:
-                found = load_models(cli, board, refs, progress)
+                found = provider.load(refs, progress)
             except Canceled:
                 raise
             except Exception as e:  # noqa: BLE001 - models are a nicety; never fail on them
@@ -1066,7 +1057,7 @@ class MainWindow(QMainWindow):
         if not text:
             return
         self._picked = None
-        self.btn_select_kicad.setEnabled(False)
+        self.btn_select.setEnabled(False)
         self.info.setHtml(text)
 
     def _cut_changed(self, *_):
@@ -1346,7 +1337,8 @@ class MainWindow(QMainWindow):
                     lines.append(f"Copper of net <b>{html.escape(net)}</b>")
                     break
         self.info.setHtml("<br>".join(lines))
-        self.btn_select_kicad.setEnabled(self._picked is not None and self._board is not None)
+        self.btn_select.setEnabled(self._picked is not None and self._source is not None
+                                   and self._source.can_select())
         if self._barrel_status:
             self.statusBar().showMessage(self._barrel_status)
         elif not probe_html:
@@ -1363,21 +1355,15 @@ class MainWindow(QMainWindow):
         return [f"<b>{'Via' if vr.kind == 'via' else 'Barrel'} current: "
                 f"{vr.current * 1e3:.2f} mA</b> &nbsp; ({vr.power * 1e3:.3f} mW in the barrel)"]
 
-    def _select_in_kicad(self):
-        if self._picked is None or self._board is None:
+    def _select_in_source(self):
+        source = self._source
+        if self._picked is None or source is None or not source.can_select():
             return
-        from kipy.proto.common.types import KIID
-
-        class _Ref:  # add_to_selection only needs an object with an ``id``
-            def __init__(self, value):
-                self.id = KIID(value=value)
-
         try:
-            self._board.clear_selection()
-            self._board.add_to_selection([_Ref(self._picked[1])])
-            self.log(f"Selected {self._picked[0]} in KiCad")
+            source.select(*self._picked)
+            self.log(f"Selected {self._picked[0]} in {source.name}")
         except Exception as e:  # noqa: BLE001
-            self.log(f"Could not select in KiCad: {e}", logging.WARNING)
+            self.log(f"Could not select in {source.name}: {e}", logging.WARNING)
 
     # ============================================================ close
     def closeEvent(self, event):
