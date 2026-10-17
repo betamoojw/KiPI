@@ -20,7 +20,7 @@ from kipi.core.geometry.copper import drill_holes  # noqa: E402
 from kipi.core.kicad_io.extract import (  # noqa: E402
     _PAD_TYPES, _VIA_TYPES, extract_board, refill_and_wait,
 )
-from kipi.core.kicad_io.snapshot import from_dict, to_dict  # noqa: E402
+from kipi.core.model.snapshot_io import from_dict, to_dict  # noqa: E402
 
 COPPER = [L.BL_F_Cu, L.BL_In1_Cu, L.BL_In2_Cu, L.BL_B_Cu]
 

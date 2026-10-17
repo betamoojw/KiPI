@@ -26,7 +26,7 @@ def main(argv=None) -> int:
 
     if args.dump:
         from kipi.core.kicad_io.extract import connect, extract_board
-        from kipi.core.kicad_io.snapshot import save
+        from kipi.core.model.snapshot_io import save
         from kipi.core.progress import ProgressReporter
         prog = ProgressReporter()
         kicad, board = connect(progress=prog)
@@ -44,7 +44,7 @@ def main(argv=None) -> int:
     try:
         if args.snapshot:
             from kipi.gui.app import run
-            from kipi.core.kicad_io.snapshot import load
+            from kipi.core.model.snapshot_io import load
             return run(snapshot=load(args.snapshot), instance=instance)
         return _run_live(instance)
     finally:

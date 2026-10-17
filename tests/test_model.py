@@ -3,8 +3,8 @@ import math
 import pytest
 
 from kipi.core.geometry.copper import net_copper, net_layer_copper
-from kipi.core.kicad_io import snapshot
-from kipi.core.kicad_io.convert import arc_points as _arc_points
+from kipi.core.model import snapshot_io as snapshot
+from kipi.core.geometry.arcs import arc_points as _arc_points
 from kipi.core.model.nets import classify_nets, guess_voltage, is_ground_name, is_power_name
 from synthetic import B, F, IN1, IN2, make_board
 

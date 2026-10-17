@@ -17,42 +17,12 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from kipi.core.viz.layer_colors import DEFAULT_COPPER, RGB
+
 log = logging.getLogger(__name__)
-
-RGB = Tuple[int, int, int]
-
-#: KiCad's built-in default theme ("KiCad Default"), keyed like a theme file's
-#: ``board.copper``: ``f``, ``in1`` .. ``in30``, ``b``.
-_INNER_DEFAULT: List[RGB] = [
-    (127, 200, 127), (206, 125, 44), (79, 203, 203), (219, 98, 139), (167, 165, 198),
-    (40, 204, 217), (232, 178, 167), (242, 237, 161), (141, 203, 129), (237, 124, 51),
-    (91, 195, 235), (247, 111, 142)]
-DEFAULT_COPPER: Dict[str, RGB] = {"f": (200, 52, 52), "b": (77, 127, 196)}
-DEFAULT_COPPER.update({f"in{i}": _INNER_DEFAULT[i - 1] for i in range(1, 13)})
-# From In13 on, KiCad repeats In5..In12's seven colors after In12's.
-_REPEAT = [(167, 165, 198), (40, 204, 217), (232, 178, 167), (242, 237, 161),
-           (237, 124, 51), (91, 195, 235), (247, 111, 142)]
-DEFAULT_COPPER.update({f"in{i}": _REPEAT[(i - 13) % 7] for i in range(13, 31)})
 
 _BUILTIN = ("", "_builtin_default", "_builtin_classic")
 _COLOR = re.compile(r"rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)")
-
-# KiCad's BoardLayer enum (the API's): F.Cu, In1.Cu .. In30.Cu, B.Cu.
-_BL_F_CU, _BL_IN1_CU, _BL_IN30_CU = 3, 4, 33
-
-
-def layer_key(layer_id: int, index: int, n_layers: int) -> str:
-    """The theme key of a copper layer: ``f``, ``b`` or ``in<n>``.
-
-    The outer layers go by their place in the stackup; inner layers by their KiCad layer
-    (In3.Cu is ``in3`` even on a board that skips In2.Cu), else by their place."""
-    if index == 0:
-        return "f"
-    if index == n_layers - 1:
-        return "b"
-    if _BL_IN1_CU <= layer_id <= _BL_IN30_CU:
-        return f"in{layer_id - _BL_F_CU}"
-    return f"in{index}"
 
 
 def parse_color(text) -> Optional[RGB]:

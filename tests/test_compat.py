@@ -24,6 +24,8 @@ from test_tree import board, setup
     (("kipi.mesh.mesher", "NetMesh"), ("kipi.core.mesh.mesher", "NetMesh")),
     (("kipi.model.board", "Pad"), ("kipi.core.model.board", "Pad")),
     (("kipi.thermal.cosim", "ThermalResult"), ("kipi.dc.thermal.cosim", "ThermalResult")),
+    (("kipi.core.kicad_io.snapshot", "load"), ("kipi.core.model.snapshot_io", "load")),
+    (("kipi.kicad_io.snapshot", "load"), ("kipi.core.model.snapshot_io", "load")),
     (("kipi.dc.pi.tree", "TreeResult"), ("kipi.dc.pi.tree", "TreeResult")),
     (("numpy", "ndarray"), ("numpy", "ndarray")),
 ])

@@ -569,7 +569,7 @@ class MainWindow(QMainWindow):
                                               "KiPI snapshot (*.json *.json.gz)")
         if not path:
             return
-        from kipi.core.kicad_io.snapshot import load
+        from kipi.core.model.snapshot_io import load
 
         self._run(lambda progress: load(path), self._set_snapshot, "Opening snapshot")
 
@@ -582,7 +582,7 @@ class MainWindow(QMainWindow):
                                               "KiPI snapshot (*.json.gz *.json)")
         if not path:
             return
-        from kipi.core.kicad_io.snapshot import save
+        from kipi.core.model.snapshot_io import save
         save(self.snapshot, path)
         self.log(f"Snapshot saved to {path}")
 

@@ -10,17 +10,15 @@ import os
 import time
 from typing import Dict, Iterable, List, Optional
 
-from kipi.core.model.board import (
-    BoardSnapshot, CopperLayer, DielectricLayer, Footprint, Net, Pad, Poly, Stackup,
-    Track, Via, Zone,
-)
-from kipi.core.kicad_io.convert import arc_points, mm, poly, pt, shapely_to_polys
+from kipi.core.geometry.arcs import arc_points
+from kipi.core.geometry.copper import shapely_to_polys
+from kipi.core.kicad_io.convert import mm, poly, pt
 from kipi.core.kicad_io.copper_shapes import copper_shape_zones
+from kipi.core.model.board import (
+    BoardSnapshot, Footprint, Net, Pad, Poly, Stackup, Track, Via, Zone,
+)
+from kipi.core.model.stackup import build_stackup
 from kipi.core.progress import NULL, ProgressReporter
-
-DEFAULT_BOARD_THICKNESS_MM = 1.6
-DEFAULT_OUTER_CU_MM = 0.035
-DEFAULT_INNER_CU_MM = 0.0175
 
 
 class ExtractionError(RuntimeError):
@@ -180,45 +178,7 @@ def extract_stackup(board, progress: ProgressReporter = NULL) -> Stackup:
         progress.warn(f"Could not read board stackup layers ({e}); using defaults")
         entries = []
 
-    from_board = sum(1 for e in entries if e[0] == "cu") == len(cu_ids) and len(cu_ids) > 0
-    if not from_board:
-        progress.warn("Stackup incomplete; synthesizing a default "
-                      f"{DEFAULT_BOARD_THICKNESS_MM} mm stackup")
-        entries = []
-        n = len(cu_ids)
-        cu_t = [DEFAULT_OUTER_CU_MM if i in (0, n - 1) else DEFAULT_INNER_CU_MM for i in range(n)]
-        diel_t = (DEFAULT_BOARD_THICKNESS_MM - sum(cu_t)) / max(1, n - 1)
-        for i, lid in enumerate(cu_ids):
-            entries.append(("cu", lid, cu_t[i], "", 0.0))
-            if i < n - 1:
-                entries.append(("diel", -1, diel_t, "FR4", 4.5))
-
-    total = sum(e[2] for e in entries)
-    z = total
-    copper: List[CopperLayer] = []
-    dielectrics: List[DielectricLayer] = []
-    last_cu = -1
-    pending_diel: List[DielectricLayer] = []
-    for kind, lid, t, mat, er in entries:
-        z -= t
-        if kind == "cu":
-            copper.append(CopperLayer(id=lid, name=names.get(lid, str(lid)), index=len(copper),
-                                      thickness_mm=t, z_bottom_mm=z))
-            for d in pending_diel:
-                d.below_layer = lid
-            pending_diel = []
-            last_cu = lid
-        else:
-            d = DielectricLayer(thickness_mm=t, material=mat, epsilon_r=er, above_layer=last_cu)
-            dielectrics.append(d)
-            pending_diel.append(d)
-
-    progress.info(f"Stackup: {len(copper)} copper layers, {total:.3f} mm total" +
-                  ("" if from_board else " (default)"))
-    for c in copper:
-        progress.info(f"  {c.name:<8} t={c.thickness_mm * 1000:.1f} um  z={c.z_mid_mm:.3f} mm")
-    return Stackup(copper=copper, dielectrics=dielectrics, board_thickness_mm=total,
-                   from_board=from_board)
+    return build_stackup(entries, cu_ids, names, progress)
 
 
 # ---------------------------------------------------------------------------

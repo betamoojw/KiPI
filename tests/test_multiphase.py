@@ -212,7 +212,7 @@ EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "multiphase_buck"
 
 
 def test_example_board_solves():
-    from kipi.core.kicad_io.snapshot import load
+    from kipi.core.model.snapshot_io import load
     folder = EXAMPLE
     snap = load(folder / "multiphase_buck.kipi.json.gz")
     s = PISetup.load(folder / "multiphase_buck.kipi-setup.json")
