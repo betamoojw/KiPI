@@ -5,6 +5,7 @@
     python kipi_launcher.py --repair      # reinstall everything from scratch
     python kipi_launcher.py --reset       # delete KiPI's environment; set up on next start
     python kipi_launcher.py --add-pardiso | --remove-pardiso
+    python kipi_launcher.py --create-shortcut   # add KiPI to the Start menu / app menu
 
 ``kipi_launcher.pyw`` does the same with no console window (double-click it).
 """
@@ -24,8 +25,11 @@ from kipi.launcher.install import Canceled, InstallError, remove_env
 from kipi.launcher.setup_env import Summary, perform
 from kipi.launcher.state import load, needs_setup
 
-#: Set for the KiPI the launcher starts: the launcher that started it (About uses it).
+#: Set for the KiPI the launcher starts: the launcher that started it, and the Python that
+#: ran it (outside KiPI's environment, so it can rebuild it). About's "Manage
+#: dependencies" starts the launcher again with them.
 LAUNCHER_ENV = "KIPI_LAUNCHER"
+LAUNCHER_PYTHON_ENV = "KIPI_LAUNCHER_PYTHON"
 KEEP_LOGS = 10
 
 
@@ -60,8 +64,13 @@ def parse(argv: Optional[List[str]]) -> argparse.Namespace:
     what.add_argument("--reset", action="store_true", help="delete KiPI's environment")
     what.add_argument("--add-pardiso", action="store_true", help="install PARDISO")
     what.add_argument("--remove-pardiso", action="store_true", help="remove PARDISO")
+    what.add_argument("--create-shortcut", action="store_true",
+                      help="add KiPI to the Start menu (Windows) or applications menu (Linux)")
     ap.add_argument("--console", action="store_true", help="set up in this terminal")
     ap.add_argument("--no-launch", action="store_true", help="set up only; do not start KiPI")
+    # KiPI asking for its own setup to change: wait for it to close, as its environment
+    # cannot change while it runs.
+    ap.add_argument("--after-pid", type=int, action="append", help=argparse.SUPPRESS)
     return ap.parse_args(argv)
 
 
@@ -115,11 +124,12 @@ class _MessageBoxUI:
 
 
 def choose_python(env: Path, fresh: bool):
-    """A Python for the environment. An existing environment's own Python is fine for an
-    update; a new environment needs one from the system."""
-    commands = None
+    """A Python from the system for the environment, which also asks pip what to install.
+    An existing environment's own Python is the last resort, for an update only: one made
+    by uv has no pip, so the package list then comes from the release's."""
+    commands = system.candidates()
     if not fresh and paths.env_python(env).is_file():
-        commands = [[str(paths.env_python(env))]] + system.candidates()
+        commands = commands + [[str(paths.env_python(env))]]
     return system.find_python(commands)
 
 
@@ -136,6 +146,19 @@ def main(argv: Optional[List[str]] = None, windowed: bool = False) -> int:
     req = paths.requirements_file()
     log = Log(paths.log_dir(data))
     ui = make_ui(args.console, windowed)
+    if args.create_shortcut:
+        from kipi.launcher.shortcut import ShortcutError, create
+        try:
+            ui.info(f"KiPI is in your applications now ({create()}).")
+            return 0
+        except ShortcutError as e:
+            ui.error(f"no shortcut was made: {e}")
+            return 2
+    if args.after_pid:
+        ui.status("Waiting for KiPI to close...")
+        if not all(system.wait_for_exit(pid) for pid in args.after_pid):
+            ui.error("KiPI is still open. Close it, then change the setup again.")
+            return 1
     previous = load(env)
     want_pardiso = previous.pardiso if previous else False
     pardiso_ok, pardiso_why = system.pardiso_supported()
@@ -172,13 +195,17 @@ def main(argv: Optional[List[str]] = None, windowed: bool = False) -> int:
             return 2
         ui.status("Checking which packages KiPI needs...")
         plan = deps.make_plan([python.executable], req, pardiso_ok)
-        log.write(f"Plan ({plan.source or 'names only'}): "
+        log.write(f"Plan ({plan.source or 'names only'}"
+                  + (f"; {plan.note}" if plan.note else "") + "): "
                   + ", ".join(f"{p.name} {p.version}" for p in plan.packages))
         summary = Summary(reason, python, env, plan, pardiso_ok, pardiso_why, want_pardiso)
         choice = ui.confirm(summary) if ask else want_pardiso
         if choice is None:
             ui.info("Setup canceled; nothing was changed.")
-            return 1
+            if not args.after_pid:
+                return 1
+            ui.close()          # KiPI was closed only to change the setup: open it again
+            return launch(env, args.board, windowed)
 
         def task(on_line, on_fraction, register):
             def line(text):
@@ -213,6 +240,7 @@ def launch(env: Path, board: Optional[str], windowed: bool) -> int:
         [str(paths.KIPI_ROOT)] + ([environ["PYTHONPATH"]] if environ.get("PYTHONPATH") else []))
     environ["KIPI_HOST"] = "standalone"
     environ[LAUNCHER_ENV] = str(paths.KIPI_ROOT / "kipi_launcher.py")
+    environ[LAUNCHER_PYTHON_ENV] = sys.executable
     if windowed:
         # Nothing to wait for: the launcher's job is done once KiPI is running.
         flags = 0x00000008 if sys.platform == "win32" else 0      # DETACHED_PROCESS

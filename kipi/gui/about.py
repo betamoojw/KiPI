@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import platform
+import subprocess
 import sys
 import threading
 import urllib.request
@@ -16,11 +18,12 @@ from typing import Any, List, Optional, Tuple
 from qtpy.QtCore import QObject, QSettings, QSize, Qt, Signal
 from qtpy.QtGui import QGuiApplication, QMovie, QPixmap
 from qtpy.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
+    QApplication, QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QMessageBox, QPushButton,
+    QVBoxLayout, QWidget,
 )
 
 from kipi import __version__
-from kipi.host import current as current_host
+from kipi.host import Host, current as current_host
 
 NAME = "KiPI"
 DESCRIPTION = ("Power integrity analysis for KiCad: DC IR drop, current density, "
@@ -114,6 +117,27 @@ def fetch_stats(url: str = STATS_URL, timeout: float = STATS_TIMEOUT_S) -> Optio
     except Exception:          # any failure just leaves the stats out
         return None
     return data if parse_stats(data) is not None else None
+
+
+def launcher_command() -> Optional[List[str]]:
+    """The command that opens the launcher's setup once this KiPI has closed, or None if
+    the launcher did not start this KiPI (as a plugin, or with ``python -m kipi``)."""
+    launcher = os.environ.get("KIPI_LAUNCHER", "")
+    python = os.environ.get("KIPI_LAUNCHER_PYTHON", "")
+    if current_host() is not Host.STANDALONE or not (launcher and python):
+        return None
+    if not (Path(launcher).is_file() and Path(python).is_file()):
+        return None
+    pythonw = Path(python).with_name("pythonw.exe")
+    if sys.platform == "win32" and pythonw.is_file():
+        python = str(pythonw)                    # no console window
+    script = Path(launcher).with_suffix(".pyw")  # the setup window, no terminal
+    if not script.is_file():
+        script = Path(launcher)
+    # A venv's python.exe on Windows is a small program that starts the real Python as a
+    # child; the environment is free only once both have exited.
+    pids = [os.getpid()] + ([os.getppid()] if sys.platform == "win32" else [])
+    return [python, str(script), "--setup"] + [a for p in pids for a in ("--after-pid", str(p))]
 
 
 def _settings() -> QSettings:
@@ -211,12 +235,37 @@ class AboutDialog(QDialog):
         copy.setToolTip("Copy the versions above, for pasting into a bug report")
         copy.clicked.connect(lambda: QGuiApplication.clipboard().setText(info_text()))
         buttons.addButton(copy, QDialogButtonBox.ActionRole)
+        if launcher_command() is not None:
+            manage = QPushButton("Manage dependencies…", self)
+            manage.setToolTip("Close KiPI and open its setup, to add or remove PARDISO or "
+                              "reinstall KiPI's packages; KiPI starts again afterwards")
+            manage.clicked.connect(self._manage_dependencies)
+            buttons.addButton(manage, QDialogButtonBox.ActionRole)
         buttons.rejected.connect(self.reject)
 
         lay = QVBoxLayout(self)
         lay.addLayout(top)
         lay.addWidget(buttons)
         self.setMinimumWidth(520)
+
+    def _manage_dependencies(self):
+        if QMessageBox.question(
+                self, "Manage dependencies",
+                "KiPI closes and its setup opens, where you can add or remove PARDISO. KiPI "
+                "starts again when the setup is done.\n\nSave your setup first if you have "
+                "unsaved changes. Close KiPI now?") != QMessageBox.Yes:
+            return
+        cmd = launcher_command()
+        try:
+            flags = 0x00000008 if sys.platform == "win32" else 0    # DETACHED_PROCESS
+            subprocess.Popen(cmd, close_fds=True, creationflags=flags,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        except OSError as e:
+            QMessageBox.warning(self, "KiPI", f"Could not start KiPI's setup: {e}")
+            return
+        self.accept()
+        QApplication.instance().closeAllWindows()
 
     def _show_stats(self, stats: Optional[RepoStats]):
         if stats is not None:

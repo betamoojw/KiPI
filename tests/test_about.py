@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 
 import pytest
 
@@ -133,3 +134,19 @@ def test_stats_are_fetched_once_per_session(app, monkeypatch):
     d2 = about.AboutDialog()
     assert d2._fetch is None and len(calls) == 1
     assert d2.stats_label.isVisibleTo(d2)    # from the cache the first fetch filled
+
+
+def test_manage_dependencies_only_when_the_launcher_started_kipi(monkeypatch, tmp_path):
+    from kipi import host
+    launcher = tmp_path / "kipi_launcher.py"
+    launcher.write_text("")
+    (tmp_path / "kipi_launcher.pyw").write_text("")
+    monkeypatch.delenv("KIPI_LAUNCHER", raising=False)
+    assert about.launcher_command() is None                 # python -m kipi
+    monkeypatch.setenv("KIPI_LAUNCHER", str(launcher))
+    monkeypatch.setenv("KIPI_LAUNCHER_PYTHON", sys.executable)
+    cmd = about.launcher_command()
+    assert cmd[1] == str(tmp_path / "kipi_launcher.pyw") and cmd[2] == "--setup"
+    assert cmd[cmd.index("--after-pid") + 1] == str(os.getpid())
+    host.set_current(host.Host.PLUGIN)
+    assert about.launcher_command() is None                 # the plugin's packages are KiCad's

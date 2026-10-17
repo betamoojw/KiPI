@@ -142,3 +142,29 @@ def can_show_windows() -> bool:
     if sys.platform.startswith("linux"):
         return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
     return True
+
+
+def wait_for_exit(pid: int, timeout: float = 60.0, poll: float = 0.2) -> bool:
+    """Wait for process ``pid`` to end; False if it is still running after ``timeout``."""
+    import time
+    deadline = time.monotonic() + timeout
+    if sys.platform == "win32":
+        import ctypes
+        SYNCHRONIZE, WAIT_TIMEOUT = 0x00100000, 0x102
+        handle = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, int(pid))
+        if not handle:
+            return True                 # gone already (or never ours to see)
+        try:
+            ms = max(0, int(timeout * 1000))
+            return ctypes.windll.kernel32.WaitForSingleObject(handle, ms) != WAIT_TIMEOUT
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    while time.monotonic() < deadline:
+        try:
+            os.kill(int(pid), 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:         # alive, but someone else's
+            pass
+        time.sleep(poll)
+    return False

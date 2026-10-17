@@ -344,3 +344,99 @@ def test_python_m_kipi_points_at_the_launcher(monkeypatch, capsys):
     assert cli.main([]) == 2
     err = capsys.readouterr().err
     assert "PySide6, pyamg are missing" in err and "kipi_launcher.py" in err
+
+
+# --- Waiting for KiPI, shortcuts, and KiPI asking for its setup ------------------------------
+
+def test_waiting_for_a_process_to_end():
+    from kipi.launcher import system
+    import subprocess
+    quick = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(0.5)"])
+    assert system.wait_for_exit(quick.pid, timeout=20)
+    slow = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert not system.wait_for_exit(slow.pid, timeout=0.5)
+    finally:
+        slow.kill()
+        slow.wait()
+
+
+def test_kipi_asking_for_its_setup_waits_for_it_to_close(started, monkeypatch):
+    from kipi.launcher import system
+    launcher.main([])
+    monkeypatch.setattr(system, "wait_for_exit", lambda pid, timeout=60.0: False)
+    assert launcher.main(["--setup", "--after-pid", "123"]) == 1
+    assert "still open" in "\n".join(started["out"])
+    waited = []
+    monkeypatch.setattr(system, "wait_for_exit",
+                        lambda pid, timeout=60.0: waited.append(pid) or True)
+    started["answers"] = ["n", "n"]                     # change nothing after all
+    assert launcher.main(["--setup", "--after-pid", "123", "--after-pid", "45"]) == 0
+    assert waited == [123, 45]
+    assert started["launched"][-1] is None              # KiPI opens again anyway
+
+
+def test_the_shortcut_option(started, monkeypatch, tmp_path):
+    from kipi.launcher import shortcut
+    monkeypatch.setattr(shortcut, "create", lambda: tmp_path / "KiPI.lnk")
+    assert launcher.main(["--create-shortcut"]) == 0
+    assert "KiPI.lnk" in "\n".join(started["out"]) and started["launched"] == []
+
+    def fail():
+        raise shortcut.ShortcutError("not supported on macOS yet")
+    monkeypatch.setattr(shortcut, "create", fail)
+    assert launcher.main(["--create-shortcut"]) == 2
+
+
+def test_a_linux_menu_entry(tmp_path, monkeypatch):
+    from kipi.launcher import shortcut
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    path = shortcut.create("linux", root=Path("/opt/KiPI"))
+    assert path == tmp_path / "applications" / "kipi.desktop"
+    text = path.read_text()
+    assert f'Exec="{sys.executable}" "{Path("/opt/KiPI/kipi_launcher.py")}" %f' in text
+    assert "Name=KiPI" in text and "Terminal=false" in text
+
+
+def test_macos_says_how_to_start_kipi_instead():
+    from kipi.launcher import shortcut
+    with pytest.raises(shortcut.ShortcutError, match="kipi_launcher.py"):
+        shortcut.create("darwin")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows Start menu")
+def test_a_windows_start_menu_shortcut(tmp_path, monkeypatch):
+    """PowerShell for real, writing into a scratch folder instead of the Start menu."""
+    from kipi.launcher import shortcut
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    path = shortcut.create("win32")
+    assert path == tmp_path / "Microsoft/Windows/Start Menu/Programs/KiPI.lnk"
+    assert path.is_file() and path.stat().st_size > 0
+
+
+def test_kipi_learns_which_python_ran_the_launcher(tmp_path, monkeypatch):
+    env = tmp_path / "venv"
+    py = paths.env_python(env)
+    py.parent.mkdir(parents=True)
+    py.write_text("")
+    calls = []
+    monkeypatch.setattr(launcher.subprocess, "call",
+                        lambda cmd, env=None: calls.append(env) or 0)
+    launcher.launch(env, None, windowed=False)
+    assert calls[0][launcher.LAUNCHER_PYTHON_ENV] == sys.executable
+
+
+def test_a_system_python_comes_before_the_environments_own(tmp_path, monkeypatch):
+    """uv makes environments with no pip, which cannot list what to install."""
+    env = tmp_path / "venv"
+    py = paths.env_python(env)
+    py.parent.mkdir(parents=True)
+    py.write_text("")
+    asked = []
+    monkeypatch.setattr(launcher.system, "candidates", lambda: [["system-python"]])
+    monkeypatch.setattr(launcher.system, "find_python",
+                        lambda commands=None: asked.append(commands) or (PY, []))
+    launcher.choose_python(env, fresh=False)
+    assert asked[-1] == [["system-python"], [str(py)]]
+    launcher.choose_python(env, fresh=True)             # a new environment: never its own
+    assert asked[-1] == [["system-python"]]
