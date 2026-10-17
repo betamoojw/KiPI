@@ -15,7 +15,6 @@ from __future__ import annotations
 import csv
 import gzip
 import math
-import pickle
 import re
 import time
 from dataclasses import dataclass, field
@@ -24,11 +23,13 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from kipi import compat
+from kipi import __version__, compat
+from kipi.core import results_io
 from kipi.core.model.board import BoardSnapshot
+from kipi.core.progress import NULL, ProgressReporter
 from kipi.dc.pi.tree import drop_or_boost
 
-RESULTS_FORMAT = 1
+RESULTS_FORMAT = 2          # 2: JSON and arrays (#99); 1: a gzipped pickle
 
 
 # ---------------------------------------------------------------------------
@@ -357,23 +358,43 @@ def export_vtk(tree, scenes: Dict[str, object], snap: BoardSnapshot, folder,
 # Saved results
 # ---------------------------------------------------------------------------
 
-def save_results(path, tree, scenes, snap: BoardSnapshot, setup) -> Path:
-    """Write a results file (gzipped pickle). Only open results files you created."""
-    path = Path(path)
-    payload = {"format": RESULTS_FORMAT, "kind": "dc",
-               "saved": time.strftime("%Y-%m-%d %H:%M:%S"),
-               "board": snap.board_name, "tree": tree, "scenes": scenes, "setup": setup}
-    with gzip.open(path, "wb", compresslevel=4) as fh:
-        pickle.dump(payload, fh, protocol=pickle.HIGHEST_PROTOCOL)
-    return path
+def save_results(path, tree, snap: BoardSnapshot, setup) -> Path:
+    """Write a results file: JSON and NumPy arrays in a zip (:mod:`kipi.core.results_io`),
+    which opens on any machine and runs no code. The 3D views are not saved: they are
+    rebuilt from the solution, with the board's stackup saved alongside, when it opens."""
+    header = {"format": RESULTS_FORMAT, "kind": "dc", "kipi": __version__,
+              "saved": time.strftime("%Y-%m-%d %H:%M:%S"), "board": snap.board_name,
+              "setup": setup.to_dict() if setup is not None else None}
+    return results_io.write(path, header, {"tree": tree, "stackup": snap.stackup})
 
 
-def load_results(path) -> dict:
-    with gzip.open(Path(path), "rb") as fh:
-        # Finds classes that moved since the file was saved (see kipi.compat).
-        payload = compat.Unpickler(fh).load()
-    if not isinstance(payload, dict) or payload.get("format", 0) > RESULTS_FORMAT:
-        raise ValueError("Not a KiPI results file, or from a newer KiPI")
+def load_results(path, progress: ProgressReporter = NULL, legacy: bool = False) -> dict:
+    """``{"tree", "scenes", "setup", "board", "saved", ...}`` from a results file.
+
+    Files saved before 0.8.0 are pickles, which can run code when they are opened; they are
+    read only with ``legacy=True`` (``"legacy"`` is then True in the result), else
+    :class:`~kipi.core.results_io.LegacyResults` is raised."""
+    if results_io.is_legacy(path):
+        if not legacy:
+            raise results_io.LegacyResults("Results saved by KiPI 0.7 or earlier")
+        with gzip.open(Path(path), "rb") as fh:
+            # Finds classes that moved since the file was saved (see kipi.compat).
+            payload = compat.Unpickler(fh).load()
+        if not isinstance(payload, dict) or payload.get("format", 0) > 1:
+            raise ValueError("Not a KiPI results file")
+        payload["legacy"] = True
+    else:
+        payload = results_io.read(path)
+        if payload.get("format", 0) > RESULTS_FORMAT:
+            raise ValueError("These results are from a newer KiPI")
     if payload.get("kind", "dc") != "dc":           # files before 0.7.1 have no kind
         raise ValueError("This holds AC results: open it in AC mode")
+    if not payload.get("legacy"):
+        from kipi.dc.pi.model import PISetup
+        data = payload.pop("data")
+        payload["tree"] = data["tree"]
+        payload["setup"] = PISetup.from_dict(payload["setup"]) if payload.get("setup") else None
+        with progress.timed("Building result views"):
+            from kipi.dc.viz.results import build_scenes
+            payload["scenes"] = build_scenes(payload["tree"], data["stackup"], progress)
     return payload

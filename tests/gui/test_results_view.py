@@ -183,3 +183,64 @@ def test_temperature_limits_are_shared_by_every_group(app, window):
     panel.spin_scale_min.setValue(25.0)
     assert panel.color_limits("b", "temperature") == (25.0, 80.0)
     assert panel.color_limits("b", "voltage") is None
+
+
+def _idle(app, w):
+    t0 = time.time()
+    while w._busy():
+        app.processEvents()
+        assert time.time() - t0 < 30, "window did not go idle"
+    app.processEvents()
+
+
+def test_results_save_and_open_in_the_background(app, window, monkeypatch, tmp_path):
+    from kipi.core import results_io
+    tree, first = _solved(app, window, *_bridged_board())
+    path = tmp_path / "r.kipi-results"
+    monkeypatch.setattr("qtpy.QtWidgets.QFileDialog.getSaveFileName",
+                        lambda *a, **k: (str(path), ""))
+    window._export("results")
+    _idle(app, window)
+    assert path.is_file() and not results_io.is_legacy(path)
+
+    window._tree, window._scenes = None, {}
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: pytest.fail(str(a[2])))
+    monkeypatch.setattr("qtpy.QtWidgets.QFileDialog.getOpenFileName",
+                        lambda *a, **k: (str(path), ""))
+    window.open_results()
+    _idle(app, window)
+    assert set(window._scenes) == set(tree.groups)        # the 3D views are rebuilt
+    assert window.viewer.result is window._scenes[first]
+    assert [l.drop for l in window._tree.loads] == [l.drop for l in tree.loads]
+
+
+def test_results_pickled_by_an_older_kipi_open_only_when_confirmed(app, window, monkeypatch,
+                                                                   tmp_path):
+    import gzip
+    import pickle
+    tree, first = _solved(app, window, *_bridged_board())
+    path = tmp_path / "old.kipi-results"
+    with gzip.open(path, "wb") as fh:
+        pickle.dump({"format": 1, "kind": "dc", "saved": "2026-01-01 00:00:00",
+                     "board": window.snapshot.board_name, "tree": tree,
+                     "scenes": window._scenes, "setup": None}, fh)
+    window._tree, window._scenes = None, {}
+    monkeypatch.setattr("qtpy.QtWidgets.QFileDialog.getOpenFileName",
+                        lambda *a, **k: (str(path), ""))
+    asked = []
+
+    def answer(button):
+        def warning(parent, title, text, *a):
+            asked.append(text)
+            return button
+        return warning
+    monkeypatch.setattr(QMessageBox, "warning", answer(QMessageBox.Cancel))
+    window.open_results()
+    _idle(app, window)
+    assert "pickle" in asked[0] and window._tree is None
+
+    monkeypatch.setattr(QMessageBox, "warning", answer(QMessageBox.Open))
+    window.open_results()
+    _idle(app, window)
+    assert len(asked) == 2 and set(window._scenes) == set(tree.groups)
+    assert "save them again" in window.log_view.toPlainText()

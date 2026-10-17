@@ -1142,7 +1142,7 @@ class MainWindow(QMainWindow):
             from kipi.core.mesh.mesher import MeshError
             from kipi.dc.pi.tree import solve_tree
             from kipi.dc.solver import SolveError
-            from kipi.dc.viz.results import build_result_scene
+            from kipi.dc.viz.results import build_scenes
             try:
                 if frozen.thermal.enabled:
                     from kipi.dc.thermal.cosim import solve_electrothermal
@@ -1152,13 +1152,8 @@ class MainWindow(QMainWindow):
             except (SolveError, MeshError) as e:
                 progress.warn(str(e))
                 return None, str(e)       # a setup problem, reported in the panel
-            scenes = {}
             with progress.timed("Building result views"):
-                temp = tree.thermal.sampler() if tree.thermal is not None else None
-                for name, g in tree.groups.items():
-                    progress.check_cancel()
-                    progress.info(f"  {name}: {g.result.mesh.n_tris} triangles")
-                    scenes[name] = build_result_scene(snap, g.result, temperature=temp)
+                scenes = build_scenes(tree, snap, progress)
             if report_path is not None:
                 from kipi.dc.report.html import write_report
                 with progress.timed("Writing HTML report"):
@@ -1365,9 +1360,7 @@ class MainWindow(QMainWindow):
                     str(Path(start) / f"{stamped(self._results_stem())}.kipi-results"),
                     "KiPI results (*.kipi-results)")
                 if path:
-                    report.save_results(path, self._tree, self._scenes, self.snapshot,
-                                        self.solve_panel.setup)
-                    self.log(f"Saved results to {path}")
+                    self._save_results(path)
                 return
             folder = QFileDialog.getExistingDirectory(self, "Export to folder", start)
             if not folder:
@@ -1399,19 +1392,80 @@ class MainWindow(QMainWindow):
                                               "KiPI results (*.kipi-results)")
         if not path:
             return
-        try:
-            data = report.load_results(path)
-        except Exception as e:  # noqa: BLE001 - any unreadable file
-            QMessageBox.warning(self, "KiPI", f"Could not open {path}:\n{e}")
+        legacy = self._allow_legacy_results(path)
+        if legacy is None:
             return
-        if self.snapshot is not None and data["board"] != self.snapshot.board_name:
-            self.log(f"Results are for {data['board']}, not {self.snapshot.board_name}",
+
+        def work(progress):
+            try:
+                return report.load_results(path, progress, legacy=legacy), None
+            except Canceled:
+                raise
+            except Exception as e:  # noqa: BLE001 - any unreadable file
+                return None, str(e)
+
+        def done(out):
+            data, error = out
+            if data is None:
+                QMessageBox.warning(self, "KiPI", f"Could not open {path}:\n{error}")
+                return
+            if self.snapshot is not None and data["board"] != self.snapshot.board_name:
+                self.log(f"Results are for {data['board']}, not {self.snapshot.board_name}",
+                         logging.WARNING)
+            self._tree, self._scenes = data["tree"], data["scenes"]
+            first = (self._tree.loads[0].group if self._tree.loads
+                     else next(iter(self._tree.groups)))
+            self.solve_panel.show_results(self._tree, first)
+            self._show_group(first)
+            self.log(f"Opened results saved {data['saved']} from {path}")
+            self._warn_legacy(data)
+
+        from kipi.core.progress import Canceled
+        self._run(work, done, "Opening results")
+
+    def _save_results(self, path: str):
+        from kipi.dc.pi import report
+        tree, snap, setup = self._tree, self.snapshot, self.solve_panel.setup
+
+        def work(progress):
+            with progress.timed("Saving results"):
+                try:
+                    report.save_results(path, tree, snap, setup)
+                except (OSError, TypeError, ValueError) as e:
+                    return str(e)
+            return None
+
+        def done(error):
+            if error:
+                QMessageBox.warning(self, "KiPI", f"Saving the results failed: {error}")
+            else:
+                self.log(f"Saved results to {path}")
+
+        self._run(work, done, "Saving results")
+
+    def _allow_legacy_results(self, path: str) -> Optional[bool]:
+        """Whether ``path`` holds results pickled by KiPI 0.7 or earlier, which can run code
+        when opened (#99); None if it does and the user chose not to open it."""
+        from kipi.core import results_io
+        try:
+            if not results_io.is_legacy(path):
+                return False
+        except OSError:
+            return False             # opening it fails again, and says why
+        answer = QMessageBox.warning(
+            self, "KiPI",
+            f"{Path(path).name} was saved by KiPI 0.7 or earlier, as a Python pickle, which "
+            "can run code on this computer when it is opened.\n\nOpen it only if you saved "
+            "it yourself or trust whoever did. Saving the results again writes KiPI's new "
+            "format, which cannot run code.",
+            QMessageBox.Open | QMessageBox.Cancel, QMessageBox.Cancel)
+        return True if answer == QMessageBox.Open else None
+
+    def _warn_legacy(self, data: dict):
+        if data.get("legacy"):
+            self.log("These results are in the pickle format of KiPI 0.7 and earlier, which a "
+                     "later KiPI will no longer open; save them again to keep them",
                      logging.WARNING)
-        self._tree, self._scenes = data["tree"], data["scenes"]
-        first = self._tree.loads[0].group if self._tree.loads else next(iter(self._tree.groups))
-        self.solve_panel.show_results(self._tree, first)
-        self._show_group(first)
-        self.log(f"Opened results saved {data['saved']} from {path}")
 
     def _open_ac_results(self):
         from kipi.ac import report
@@ -1420,8 +1474,11 @@ class MainWindow(QMainWindow):
                                               f"KiPI AC results (*{report.RESULTS_SUFFIX})")
         if not path:
             return
+        legacy = self._allow_legacy_results(path)
+        if legacy is None:
+            return
         try:
-            data = report.load_results(path)
+            data = report.load_results(path, legacy=legacy)
         except Exception as e:  # noqa: BLE001 - any unreadable file
             QMessageBox.warning(self, "KiPI", f"Could not open {path}:\n{e}")
             return
@@ -1437,6 +1494,7 @@ class MainWindow(QMainWindow):
                                                   "in the setup, so there is nothing to show.")
             return
         self.log(f"Opened AC results saved {data['saved']} from {path}")
+        self._warn_legacy(data)
 
     def _show_group(self, name: str):
         if not self._tree or name not in self._scenes:

@@ -138,6 +138,20 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   read in a future version. The next save writes the `.yml` file and leaves the JSON file
   as it was. KiPI now needs PyYAML. In an environment that does not have it yet, setups
   stay JSON. The example and validation setups are now YAML.
+- Results files (`.kipi-results`, `.kipi-ac-results`) hold JSON and NumPy arrays in a zip
+  instead of a Python pickle (#99). They open on any computer and cannot run code, so they
+  are safe to share. Opening one builds only KiPI's own result classes, and arrays are read
+  without pickled objects.
+  - Saving is about 4x faster and the files about 3x smaller, because the 3D views are no
+    longer saved: they are rebuilt from the solution when the file opens. On the multiphase
+    example, saving takes 0.7 s instead of 2.8 s, for 30 MB instead of 92 MB. Saving and
+    opening DC results run in the background with progress, like a solve.
+  - A failed save leaves an earlier file of the same name as it was.
+  - Results saved by KiPI 0.7 and earlier still open, but KiPI first warns that a pickle
+    can run code and asks whether to open it. It then reads the pickle with an allowlist of
+    the classes results hold, and logs that the format is deprecated. Saving again writes
+    the new format.
+  - Electro-thermal results save and reopen in the new format too (#50).
 
 ### Internal
 - Board sources are kept apart from the rest of KiPI. `kipi/sources/` holds where boards

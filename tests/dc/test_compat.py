@@ -7,7 +7,8 @@ import re
 import pytest
 
 from kipi import compat
-from kipi.dc.pi.report import RESULTS_FORMAT, load_results, save_results
+from kipi.core.results_io import LegacyResults
+from kipi.dc.pi.report import load_results, save_results
 from kipi.dc.thermal.cosim import solve_electrothermal
 from kipi.dc.thermal.model import ThermalSettings
 from kipi.dc.viz.results import build_result_scene
@@ -51,7 +52,7 @@ def solved():
 
 def test_electrothermal_results_save_and_load(solved, tmp_path):
     snap, s, tree, scenes = solved
-    back = load_results(save_results(tmp_path / "r.kipi-results", tree, scenes, snap, s))
+    back = load_results(save_results(tmp_path / "r.kipi-results", tree, snap, s))
     assert back["tree"].thermal.t_max == pytest.approx(tree.thermal.t_max)
     assert [l.drop for l in back["tree"].loads] == [l.drop for l in tree.loads]
     # The live temperature field is not saved; its effect on resistivity is.
@@ -75,7 +76,7 @@ class _OldPaths(pickle._Pickler):
 
 def test_results_saved_with_the_old_module_paths_still_load(solved, tmp_path):
     snap, s, tree, scenes = solved
-    payload = {"format": RESULTS_FORMAT, "saved": "2026-01-01 00:00:00",
+    payload = {"format": 1, "saved": "2026-01-01 00:00:00",
                "board": snap.board_name, "tree": tree, "scenes": scenes, "setup": s}
     path = tmp_path / "old.kipi-results"
     with gzip.open(path, "wb") as fh:
@@ -85,7 +86,10 @@ def test_results_saved_with_the_old_module_paths_still_load(solved, tmp_path):
     assert b"kipi.pi.results" in old and b"kipi.dc." not in old and b"kipi.core." not in old
     with pytest.raises(ModuleNotFoundError):
         pickle.loads(old)
-    back = load_results(path)
+    with pytest.raises(LegacyResults):
+        load_results(path)                      # pickles open only when asked for (#99)
+    back = load_results(path, legacy=True)
+    assert back["legacy"]
     assert type(back["tree"]).__module__ == "kipi.dc.pi.results"
     assert [l.drop for l in back["tree"].loads] == [l.drop for l in tree.loads]
     name = next(iter(scenes))

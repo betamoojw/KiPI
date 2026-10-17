@@ -1020,8 +1020,9 @@ scale, a minimum of zero or below falls back to four decades below the maximum.<
   <tr><td>3D results for ParaView (.vtm)…</td><td class="wrap">The result meshes, for ParaView
     or other VTK tools.</td></tr>
   <tr><td>Save results…</td><td class="wrap">A <code>.kipi-results</code> file that <b>Open
-    results…</b> reloads without solving, named with the board and the time by default. It is a Python pickle: only open files you
-    trust.</td></tr>
+    results…</b> reloads without solving, named with the board and the time by default. It holds
+    JSON and NumPy arrays in a zip, which open on any computer and cannot run code, so it is safe
+    to share; the 3D views are rebuilt when it opens.</td></tr>
 </table>
 <div class="pair">
 <figure><img src="images/report_tables.png" alt="HTML report tables"><figcaption>HTML report: summary tables.</figcaption></figure>
@@ -1515,9 +1516,11 @@ them a model or confirm they really do not belong on this rail.</p>
     are deprecated: a future KiPI will stop reading them.</td></tr>
   <tr><td><code>*.kipi.json.gz</code></td><td class="wrap">A board snapshot (copper, stackup,
     pads, vias, parts).</td></tr>
-  <tr><td><code>*.kipi-results</code></td><td class="wrap">A saved DC solve (Python pickle).</td></tr>
+  <tr><td><code>*.kipi-results</code></td><td class="wrap">A saved DC solve: JSON and NumPy
+    arrays in a zip. Files saved by KiPI 0.7 and earlier are Python pickles, which can run
+    code; KiPI asks before it opens one, and they are deprecated.</td></tr>
   <tr><td><code>*.kipi-ac-results</code></td><td class="wrap">Saved AC results, every rail
-    solved (Python pickle).</td></tr>
+    solved, in the same format.</td></tr>
   <tr><td><code>&lt;board&gt;_kipi_report_&lt;date&gt;_&lt;time&gt;.html</code></td><td class="wrap">The DC HTML report.</td></tr>
   <tr><td><code>&lt;board&gt;_&lt;rail&gt;_ac_report_&lt;date&gt;_&lt;time&gt;.html</code></td><td class="wrap">An AC rail's HTML report.</td></tr>
   <tr><td><code>*.csv</code></td><td class="wrap">DC tables, or an AC rail's impedance.</td></tr>

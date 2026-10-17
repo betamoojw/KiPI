@@ -471,8 +471,10 @@ tables sort the same way:
 of every pin each rail was solved with, which the HTML report also lists), the 3D
 results as a ParaView `.vtm`, or **Save
 results…** as a `.kipi-results` file (named with the board and the time by default), which the toolbar's **Open results…** reloads without
-solving again (load the board first). Results files are Python pickles, so only open ones
-you created.
+solving again (load the board first). Results files hold JSON and NumPy arrays in a zip:
+they open on any computer and cannot run code, so they are safe to share. The 3D views are
+rebuilt when the file opens. Results saved by KiPI 0.7 and earlier are Python pickles, which
+can run code; KiPI asks before it opens one, and saving it again writes the new format.
 
 ### 6. AC: PDN impedance
 
@@ -528,8 +530,8 @@ probe's |Z| at that frequency. The results table gives each probe's minimum and 
 were left out for having no model. Each rail keeps its last result, so switching **Rail** shows
 another rail's curves without solving again. **Export CSV…** writes |Z|, R and X at every
 frequency. **Save results…** writes every solved rail to a `.kipi-ac-results` file, which
-**Open results…** reloads in AC mode (load the board first; like DC results files, these are
-pickles, so only open ones you created).
+**Open results…** reloads in AC mode (load the board first). Like DC results files, these are
+JSON and arrays in a zip, safe to share.
 
 Tick **HTML report** next to **Solve rail** to also write
 `<board>_<rail>_ac_report_<date>_<time>.html` next to the board after each solve. It opens in your web browser when the solve
