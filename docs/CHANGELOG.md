@@ -50,6 +50,14 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
     starts KiPI again afterwards.
   - `python -m kipi` in a Python without KiPI's packages says which are missing and to use
     the launcher, instead of a traceback.
+- **How KiPI works** (#92, `docs/how-it-works.html`, served by GitHub Pages): a page
+  for newcomers on what power integrity analysis is and why it matters. It covers what
+  each analysis simulates, how the triangle mesh and the DC, electro-thermal and AC solvers
+  work, and what DC tolerance analysis and PDN impedance mean. It also explains how heat
+  raises copper resistance, how dielectric, DC bias, aging and tolerance shrink a
+  capacitor's effective value, what PARDISO gains over the default solvers, and the
+  problems PI simulation finds. It is linked at the top of the README, from the About
+  window and from the user guide.
 - **About → Check for updates** (#97) asks GitHub for the newest tagged release and says
   whether it is newer than the KiPI running, with a link to its release page. It only asks
   when clicked; offline (or rate-limited) it says it could not reach GitHub.

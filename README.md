@@ -10,6 +10,10 @@
 [![Platform: Windows | Linux | macOS](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#requirements)
 [![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-3776ab.svg?logo=python&logoColor=white)](#requirements)
 
+**New to power integrity? Read [How KiPI works](https://drewsum.github.io/KiPI/how-it-works.html)**
+([source](docs/how-it-works.html)): what PI analysis is, why it matters, and how KiPI's mesh
+and its DC, thermal and AC solvers work.
+
 KiPI is a power integrity analyzer that runs as a KiCad 9 and 10 IPC plugin. It has two
 analysis modes:
 
