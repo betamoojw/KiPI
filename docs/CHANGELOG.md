@@ -18,8 +18,8 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   - The toolbar has **Open…** and **Reload** in place of *Load from KiCad*, *Refill zones*
     and *Open snapshot…*. *Select in KiCad* and the part *Models* box are hidden, and the
     copper uses KiPI's default layer colors.
-  - Standalone opens KiPI snapshots (`.kipi.json.gz`) and KiCad board files (below).
-    Reading HYP and ODB++ files comes next.
+  - Standalone opens KiPI snapshots (`.kipi.json.gz`), KiCad board files and ODB++ jobs
+    (below). Reading HYP files comes next.
   - The title bar says *(standalone)*, and the welcome screen and About show the mode.
   - The plugin and standalone KiPI each allow one window of their own, so an open
     standalone KiPI never takes over KiCad's KiPI button.
@@ -64,6 +64,20 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   - When the open board file is saved (in KiCad or anywhere), KiPI offers to read it again.
   - **Open…** has a menu of the boards opened lately.
   - Checked against the KiCad API on real boards: identical copper, and identical DC results.
+- **ODB++ jobs.** Standalone **Open…** reads ODB++ as a `.zip`, `.tgz` or `.tar.gz`, or an
+  unpacked job (by its folder, or its `matrix/matrix` file).
+  - Pads, traces, arcs, vias (with their spans from the drill layers) and filled planes,
+    tied to nets and part pins through the job's netlist; the stackup from the layer matrix
+    and each layer's attributes.
+  - Pads keep their part and pin, so setups (which name parts, pins and nets) carry over;
+    the setup is found by the job's name.
+  - What the job does not give is listed under *Placeholders*: a dielectric with no
+    thickness, copper drawings whose net was guessed from the copper they touch.
+  - KiCad's export at its default 2 decimals rounds coordinates to 10 µm; copper thickness
+    is then taken from the copper weight. KiCad's quirks are handled: bottom pads already
+    mirrored, its names for pads with no number.
+  - Checked against the KiCad API on a real 8-layer board exported by KiCad 10: every
+    track, via and pad the same, and DC drops within 3 parts per million.
 - **Where the board came from, and its placeholders.** The board summary in the Info box
   names the source ("From KiCad PCB editor 10.0.7") and the snapshot file it was opened from,
   and lists under *Placeholders* each value KiPI had to fill in because the source did not
@@ -95,8 +109,12 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
 - `kipi/sources/kicad_pcb/` is the board-file reader. Its tests compare it item by item with
   the KiCad API's reading of a fixture board KiCad saved (`tests/data/kicad_pcb/`, made by
   `make_fixtures.py`). The stroke, bezier and outline helpers both KiCad readers use moved
-  to `core/geometry/shapes.py`. Sources say which files they read (`BoardSource.files()`),
-  which the window watches.
+  to `core/geometry/shapes.py`, and the pad shapes cut as KiCad cuts them to
+  `core/geometry/pad_shapes.py`. Sources say which files they read
+  (`BoardSource.files()`), which the window watches.
+- `kipi/sources/odbpp/` is the ODB++ reader, tested against KiCad's ODB++ exports of the
+  same fixture board (`tests/data/odbpp/`, also made by `make_fixtures.py`). The registry
+  lets a format be a folder as well as a file.
 - `kipi/launcher/` is the launcher, standard library only (a test checks).
   `requirements-standalone.txt` is what it installs, and
   `.github/scripts/dep_sizes.py` writes the package list it shows offline

@@ -40,8 +40,8 @@ KiPI runs two ways, from the same folder:
   folder**, and KiCad installs its dependencies.
 * **Standalone**: KiPI started on its own, with its launcher, opens board files and needs
   no KiCad. The folder can be **anywhere**; the launcher installs the dependencies on the
-  first start. It opens KiCad 7 to 10 board files (`.kicad_pcb`) and KiPI snapshots
-  (`.kipi.json.gz`). Reading HYP and ODB++ files is on the way
+  first start. It opens KiCad 7 to 10 board files (`.kicad_pcb`), ODB++ jobs and KiPI
+  snapshots (`.kipi.json.gz`). Reading HYP files is on the way
   ([#45](https://github.com/drewsum/KiPI/issues/45)).
 
 ### As a KiCad plugin
@@ -139,6 +139,16 @@ way round. Net classes come from the `.kicad_pro` beside the board. KiPI uses th
 saved in the file and does not fill zones itself, so **fill the zones in KiCad (B) and save**
 before opening the board; zones saved unfilled are listed under *Placeholders* in the board
 summary. Files from KiCad 6 or older need saving once in KiCad 7 or later.
+
+An **ODB++** job opens as a `.zip`, `.tgz` or `.tar.gz`, or unpacked (pick its
+`matrix/matrix` file). KiPI reads the copper as the job gives it, ties it to nets through
+the job's netlist, and takes the stackup from the layer matrix. The setup is found by the
+job's name, so export `Board.zip` next to `Board.kicad_pcb` to share the board's setup.
+Export at 6 decimals where you can: KiCad's default of 2 rounds every coordinate to
+10 µm (copper thickness comes from the copper weight, so it stays right). What the job
+does not carry is listed under *Placeholders*; KiCad's export in particular leaves out
+the nets of copper drawings, writes a dielectric's sublayers as one, and turns spaces in
+net names into underscores.
 
 To change the setup later, use **About → Manage dependencies…** in KiPI, or the launcher:
 
@@ -587,7 +597,8 @@ The tests also solve the example board and check that its committed setup still 
 | `kipi/sources/base.py` | What the window asks of a source (`BoardSource`: read, re-read, refill, select) and of a design tool on this computer (`InstalledTool`: layer colors, part models) |
 | `kipi/sources/registry.py` | The board files **Open…** reads, and which source reads each |
 | `kipi/sources/kicad_ipc/` | The running KiCad, through the IPC API (kipy): board extraction, zone refill, KiCad instance checks, color theme, 3D models through kicad-cli |
-| `kipi/sources/kicad_pcb/` | KiCad board files read without KiCad: S-expression parser, pad shapes cut as KiCad cuts them, the `.kicad_pro`'s net classes |
+| `kipi/sources/kicad_pcb/` | KiCad board files read without KiCad: S-expression parser, pads, the `.kicad_pro`'s net classes |
+| `kipi/sources/odbpp/` | ODB++ jobs (folder, `.zip`, `.tgz`): the archive, layer features and symbols, the `eda/data` netlist and components, the stackup from the matrix |
 | `kipi/sources/snapshot_file.py` | A saved snapshot as a source |
 | `kipi/dc/` | DC analysis: |
 | `kipi/dc/solver/` | 2.5D DC conduction FEM: sheet conductance, via/PTH barrels, series parts, sources, loads |

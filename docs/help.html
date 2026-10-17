@@ -302,13 +302,22 @@ float them in their own windows.</p>
     board files with <b>Open…</b> and needs no KiCad. The title bar then ends in
     <i>(standalone)</i>, and the controls that need KiCad are hidden (see the
     <a href="#toolbar">toolbar</a>). Standalone opens KiCad board files
-    (<code>.kicad_pcb</code>) and KiPI snapshots (<code>.kipi.json.gz</code>).</li>
+    (<code>.kicad_pcb</code>), ODB++ jobs and KiPI snapshots
+    (<code>.kipi.json.gz</code>).</li>
   <li><b>KiCad board files.</b> A <code>.kicad_pcb</code> from KiCad 7 to 10 reads the
     same as the plugin reads it from KiCad, so a board set up in the plugin opens standalone
     with its setup. Net classes come from the <code>.kicad_pro</code> next to it. KiPI uses
     the zone fills saved in the file and cannot refill them: <b>fill the zones in KiCad (B)
     and save</b> before opening. Zones saved unfilled are listed under <b>Placeholders</b>
     in the <a href="#info">board summary</a>.</li>
+  <li><b>ODB++.</b> Open a job as a <code>.zip</code>, <code>.tgz</code> or
+    <code>.tar.gz</code>, or unpacked by picking its <code>matrix/matrix</code> file. KiPI
+    reads the copper as the job gives it and the stackup from its layer matrix. The setup
+    is found by the job's name: export <code>Board.zip</code> beside
+    <code>Board.kicad_pcb</code> to share the board's setup. Export at 6 decimals if your
+    tool asks: KiCad's default of 2 rounds coordinates to 10&nbsp;µm. What the job leaves
+    out (copper drawings' nets, a dielectric's thickness) is listed under
+    <b>Placeholders</b>.</li>
   <li><b>Standalone setup.</b> Start standalone KiPI with its launcher:
     double-click <code>kipi_launcher.pyw</code> (Windows) or run <code>python
     kipi_launcher.py</code>. The first start installs KiPI's packages into an environment
@@ -349,7 +358,9 @@ float them in their own windows.</p>
   <tr><td><b>Open snapshot…</b><br><small>plugin</small></td><td class="wrap">Opens a board
     saved with <b>Save snapshot…</b>. KiCad does not need to be running.</td></tr>
   <tr><td><b>Open…</b><br><small>standalone</small></td><td class="wrap">Opens a board file:
-    a KiCad board (<code>.kicad_pcb</code>) or a KiPI snapshot (<code>.kipi.json.gz</code>).
+    a KiCad board (<code>.kicad_pcb</code>), an ODB++ job (<code>.zip</code>,
+    <code>.tgz</code>, or its <code>matrix/matrix</code> file) or a KiPI snapshot
+    (<code>.kipi.json.gz</code>).
     Its saved setup comes with it, as with <b>Load from KiCad</b>. The arrow beside it lists
     the boards opened lately.</td></tr>
   <tr><td><b>Reload</b><br><small>standalone</small></td><td class="wrap">Reads the open board
@@ -1401,6 +1412,20 @@ If the running programs cannot be listed, KiPI carries on.</p></div>
     and save in KiCad after moving copper.</li>
   <li><b>"saved by KiCad 6 or older":</b> open the board in KiCad 7 or later, save it, and
     open it again.</li>
+</ul></div>
+</details>
+<details id="ts-odbpp">
+<summary>An ODB++ job opens with nets or copper missing</summary>
+<div class="body"><ul>
+  <li><b>"not an ODB++ job":</b> the archive has no <code>matrix/matrix</code> file, e.g. a
+    zip of Gerbers. Export ODB++ from the design tool.</li>
+  <li><b>"no netlist":</b> the job has no <code>eda/data</code>; export it with its
+    netlist, or KiPI cannot tell which copper is which net.</li>
+  <li><b>A net from KiCad has a different name:</b> KiCad's ODB++ export writes spaces in
+    net names as underscores. Pick the net again in the setup.</li>
+  <li><b>A copper drawing carries no current:</b> some exporters (KiCad among them) do not
+    say which net drawn copper is on. KiPI gives it the net of the copper it touches; on
+    its own it has none.</li>
 </ul></div>
 </details>
 <details>
