@@ -38,11 +38,11 @@ KiPI runs two ways, from the same folder:
 * **As a KiCad plugin**, the main way: click the **KiPI** button in the PCB editor and KiPI
   reads the board open there. For this, the KiPI folder **must be in KiCad's plugins
   folder**, and KiCad installs its dependencies.
-* **Standalone**: KiPI started on its own opens board files and needs no KiCad. The
-  folder can be **anywhere**, and you install the dependencies yourself. For now it opens
-  KiPI snapshots (`.kipi.json.gz`, saved from the plugin with *Save snapshot…*). Reading
-  KiCad `.kicad_pcb`, HYP and ODB++ files directly, and a launcher that installs everything
-  on first run, are on the way ([#45](https://github.com/drewsum/KiPI/issues/45)).
+* **Standalone**: KiPI started on its own, with its launcher, opens board files and needs
+  no KiCad. The folder can be **anywhere**; the launcher installs the dependencies on the
+  first start. For now it opens KiPI snapshots (`.kipi.json.gz`, saved from the plugin
+  with *Save snapshot…*). Reading KiCad `.kicad_pcb`, HYP and ODB++ files directly is on
+  the way ([#45](https://github.com/drewsum/KiPI/issues/45)).
 
 ### As a KiCad plugin
 
@@ -98,31 +98,52 @@ KiPI runs two ways, from the same folder:
 
 ### Standalone
 
-You need Python 3.10 to 3.13 (see the plugin requirements above for why not 3.14). Put the
-KiPI folder anywhere, by cloning this repo or unzipping `KiPI-<version>.zip` from the
-[latest release](https://github.com/drewsum/KiPI/releases/latest), and install it into a
-virtual environment of its own. Install it *editable* (`-e`): KiPI then runs from that
-folder, where it finds its user guide and icons, so leave the folder in place.
+1. Install **Python 3.10 to 3.13** if you do not have one (from
+   [python.org](https://www.python.org/downloads/), or your package manager). Python 3.14
+   will not do yet: two of KiPI's packages have no prebuilt version for it. On Linux, add
+   `python3-venv` (Debian, Ubuntu) and, for the setup window, `python3-tk`.
+2. Put the KiPI folder anywhere: clone this repo, or unzip `KiPI-<version>.zip` from the
+   [latest release](https://github.com/drewsum/KiPI/releases/latest).
+3. Start KiPI with its launcher: double-click **`kipi_launcher.pyw`** (Windows), or run
 
-```powershell
-# Windows
-py -3.12 -m venv kipi-venv
-kipi-venv\Scripts\pip install -e <path to the KiPI folder>
-kipi-venv\Scripts\kipi                                  # or: kipi <board>.kipi.json.gz
-```
+   ```sh
+   python kipi_launcher.py                      # or: python kipi_launcher.py <board>.kipi.json.gz
+   ```
+
+The first start sets KiPI up. The setup window lists every package KiPI will install with
+its size, checked with PyPI for your computer (about 254 MB to download and 810 MB on disk
+on Windows), and nothing is installed until you click **Install**. On Windows and Linux
+x86-64 it also offers [PARDISO](#optional-faster-solves-on-large-boards-windows-and-linux-x86-64),
+with its pros and cons. Everything goes into an environment of KiPI's own, outside the KiPI
+folder:
+
+| | KiPI's environment |
+|---|---|
+| Windows | `%LOCALAPPDATA%\KiPI` |
+| macOS | `~/Library/Application Support/KiPI` |
+| Linux | `~/.local/share/kipi` |
+
+(`KIPI_HOME` puts it elsewhere.) Setting up takes a few minutes; with
+[uv](https://docs.astral.sh/uv/) on the PATH it is faster. Later starts open KiPI straight
+away, and the launcher sets up again by itself when a new KiPI needs different packages.
+With no window available (no tkinter, or `--console`), setup asks in the terminal instead.
+
+KiPI's window title then ends in *(standalone)*. Use **Open…** to open a board and
+**Reload** to read it again after it changes. KiCad-only controls (*Load from KiCad*,
+*Refill zones*, *Select in KiCad*, part 3D models) are hidden.
+
+To change the setup later, use **About → Manage dependencies…** in KiPI, or the launcher:
 
 ```sh
-# macOS and Linux
-python3.12 -m venv kipi-venv
-kipi-venv/bin/pip install -e <path to the KiPI folder>
-kipi-venv/bin/kipi                                         # or: kipi <board>.kipi.json.gz
+python kipi_launcher.py --setup              # the setup window again (add or remove PARDISO)
+python kipi_launcher.py --add-pardiso        # or --remove-pardiso, without questions
+python kipi_launcher.py --repair             # reinstall everything from scratch
+python kipi_launcher.py --reset              # delete KiPI's environment
+python kipi_launcher.py --create-shortcut    # add KiPI to the Start menu / applications menu
 ```
 
-The window's title ends in *(standalone)*. Use **Open…** to open a board and **Reload** to
-read it again after it changes. KiCad-only controls (*Load from KiCad*, *Refill zones*,
-*Select in KiCad*, part 3D models) are hidden. Standalone does not need kicad-python;
-`pip install -e "<path>[kicad]"` adds it if you also want `kipi --dump` to extract a
-board from the running KiCad.
+If setup fails, the launcher says why; everything the installer printed is in the `logs`
+folder next to the environment.
 
 ### Optional: faster solves on large boards (Windows and Linux, x86-64)
 
@@ -141,8 +162,9 @@ macOS or ARM:
 | Plugin environment on disk (Windows) | about 860 MB | about 1.5 GB |
 
 Almost all of that is MKL itself (565 MB installed) and Intel's OpenMP runtime (61 MB).
+Standalone, tick it in the launcher's setup (or `python kipi_launcher.py --add-pardiso`).
 To add it to the plugin, install it into KiPI's plugin environment and restart the PCB
-editor (standalone, install it into your own environment with its `pip`):
+editor:
 
 ```powershell
 # Windows (KiCad 10; use 9.0 for KiCad 9)
@@ -509,8 +531,11 @@ otherwise; `KIPI_HOST=plugin` or `standalone` overrides that (`kipi/host.py`).
 
 `requirements.txt` is what KiCad installs into the plugin's venv: `pyproject.toml`'s
 dependencies, which are all standalone needs, plus its `kicad` extra (kicad-python).
-`tests/test_requirements.py` keeps them in step. Test and lint tools live only in
-`requirements-dev.txt`.
+`requirements-standalone.txt` is what the launcher installs: the dependencies alone.
+`tests/test_requirements.py` keeps the three in step. Test and lint tools live only in
+`requirements-dev.txt`. After changing the requirements, run
+`python .github/scripts/dep_sizes.py` to refresh the package list the launcher shows when
+it cannot check with PyPI (a test fails until you do).
 
 CI runs ruff and the test suite for every push and pull request: on Windows with Python 3.11,
 on Linux with Python 3.10 to 3.13, on macOS, and with the oldest kicad-python that
@@ -540,6 +565,8 @@ The tests also solve the example board and check that its committed setup still 
 |---|---|
 | `kipi_entry.py`, `plugin.json` | KiCad IPC plugin action (runs KiPI as the plugin) |
 | `kipi/__main__.py` | `python -m kipi` / `kipi`: standalone, or the plugin with `KIPI_HOST=plugin` |
+| `kipi_launcher.py`, `.pyw` | Standalone launcher: sets up KiPI's environment on the first start, then starts KiPI in it |
+| `kipi/launcher/` | The launcher itself, standard library only: environment location, Python discovery, the package list and sizes (`deps.py`, `deps_manifest.json`), the installer (uv or venv and pip), the setup screens (`ui_tk.py`, `ui_console.py`) and shortcuts |
 | `kipi/host.py` | Plugin or standalone: how KiPI was started |
 | `kipi/core/` | Shared by every analysis; no Qt and no analysis-specific physics: |
 | `kipi/core/model/` | Toolkit-independent board model, copper layer ids, stackup building, JSON snapshot save/load, power-net heuristics |

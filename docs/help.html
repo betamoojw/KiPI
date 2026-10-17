@@ -303,6 +303,14 @@ float them in their own windows.</p>
     <i>(standalone)</i>, and the controls that need KiCad are hidden (see the
     <a href="#toolbar">toolbar</a>). For now standalone opens KiPI snapshots
     (<code>.kipi.json.gz</code>).</li>
+  <li><b>Standalone setup.</b> Start standalone KiPI with its launcher:
+    double-click <code>kipi_launcher.pyw</code> (Windows) or run <code>python
+    kipi_launcher.py</code>. The first start installs KiPI's packages into an environment
+    of its own. The setup window lists each package with its size and the totals, and
+    offers PARDISO on Windows and Linux x86-64; nothing is installed until you click
+    <b>Install</b>. Later starts open KiPI straight away. To add or remove PARDISO later,
+    use <b>About → Manage dependencies…</b>: KiPI closes, the setup opens, and KiPI starts
+    again afterwards.</li>
   <li>While KiPI starts it shows a <b>welcome screen</b> with the logo, its version, whether
     it runs as the plugin or standalone, and the versions of Python and its main packages.
     It closes on its own after one play of the animation, or when you click it.</li>
@@ -357,7 +365,9 @@ float them in their own windows.</p>
     the project has been cloned and its releases downloaded. Those counts are fetched once a
     session from the project's GitHub repository; offline, the last ones fetched are shown,
     or none. <b>Copy version info</b> copies the versions of KiPI, Python, its libraries and
-    the sparse solver in use, for bug reports.</td></tr>
+    the sparse solver in use, for bug reports. In standalone KiPI started by its launcher,
+    <b>Manage dependencies…</b> closes KiPI and opens its setup (for example to add or
+    remove PARDISO).</td></tr>
   <tr><td><b>Mode: DC / AC</b></td><td class="wrap">Chooses the analysis. The setup dock
     shows that mode's panel. The DC setup and results are kept while you are in AC and come
     back when you switch to DC. You cannot switch while a task is running.</td></tr>
@@ -1323,6 +1333,12 @@ them a model or confirm they really do not belong on this rail.</p>
   <tr><td><code>&lt;board&gt;_&lt;rail&gt;_ac_report.html</code></td><td class="wrap">An AC rail's HTML report.</td></tr>
   <tr><td><code>*.csv</code></td><td class="wrap">DC tables, or an AC rail's impedance.</td></tr>
   <tr><td><code>*.vtm</code></td><td class="wrap">DC 3D results for ParaView.</td></tr>
+  <tr><td>KiPI's environment</td><td class="wrap">Standalone only: the packages the launcher
+    installed, in <code>%LOCALAPPDATA%\KiPI\venv</code> (Windows),
+    <code>~/Library/Application Support/KiPI/venv</code> (macOS) or
+    <code>~/.local/share/kipi/venv</code> (Linux), with the launcher's logs in
+    <code>logs</code> beside it. <code>python kipi_launcher.py --reset</code> deletes
+    it.</td></tr>
   <tr><td><code>kipi-&lt;user&gt;.lock</code>,<br><code>kipi-standalone-&lt;user&gt;.lock</code></td>
     <td class="wrap">In the temporary folder while the plugin, or standalone KiPI, is open,
     so a second one brings the first to the front. It names the owner's process, so one
@@ -1354,6 +1370,19 @@ KiPI cannot tell which one holds your board. Close the others (the message lists
 process IDs) and start KiPI again from the PCB editor of the board you want. If you know the
 check is wrong, set the environment variable <code>KIPI_ALLOW_MULTIPLE_KICAD=1</code> to skip it.
 If the running programs cannot be listed, KiPI carries on.</p></div>
+</details>
+<details id="ts-launcher">
+<summary>Standalone KiPI does not set up or start</summary>
+<div class="body"><ul>
+  <li><b>No suitable Python:</b> the launcher needs Python 3.10 to 3.13 and names the ones
+    it found. Install one from python.org (on Linux, also <code>python3-venv</code>).</li>
+  <li><b>The setup failed:</b> the message says why, and the launcher's log (in
+    <code>logs</code> next to KiPI's environment) has everything the installer printed.
+    Check the network connection and free disk space, then start the launcher again; it
+    picks up where it stopped. <code>python kipi_launcher.py --repair</code> starts over.</li>
+  <li><b>A message box says to use a terminal:</b> that Python has no tkinter for the setup
+    window. Run <code>python kipi_launcher.py</code> in a terminal and answer there.</li>
+</ul></div>
 </details>
 <details>
 <summary>Clicking the KiPI button does not open a new window</summary>

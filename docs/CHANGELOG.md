@@ -19,12 +19,37 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
     and *Open snapshot…*. *Select in KiCad* and the part *Models* box are hidden, and the
     copper uses KiPI's default layer colors.
   - For now standalone opens KiPI snapshots (`.kipi.json.gz`). Reading `.kicad_pcb`, HYP and
-    ODB++ files, and a launcher that installs the dependencies on first run, come next.
+    ODB++ files comes next.
   - The title bar says *(standalone)*, and the welcome screen and About show the mode.
   - The plugin and standalone KiPI each allow one window of their own, so an open
     standalone KiPI never takes over KiCad's KiPI button.
   - `KIPI_HOST=plugin` (or `standalone`) overrides how KiPI tells the two apart, e.g. to run
     the plugin workflow from a terminal.
+- **Standalone launcher** (`kipi_launcher.py`; double-click `kipi_launcher.pyw` on
+  Windows). The KiPI folder can be anywhere: the first start sets up an environment of
+  KiPI's own (`%LOCALAPPDATA%\KiPI`, `~/Library/Application Support/KiPI` or
+  `~/.local/share/kipi`), and later starts open KiPI straight away.
+  - The setup window lists every package that will be installed, with its version and
+    download size as PyPI gives them for this computer, and the totals to download and on
+    disk. Nothing is installed until you click *Install*. Offline, it shows the list saved
+    with the release.
+  - On Windows and Linux x86-64 it offers PARDISO, with its size, pros and cons; elsewhere
+    it says why not.
+  - It finds a Python 3.10 to 3.13 to use (the py launcher, `python3.N`, or one uv
+    installed) and says what is wrong with the others, such as Debian's missing
+    `python3-venv`. It installs with uv when uv is on the PATH, else venv and pip, and with
+    pip again if uv fails. Progress, the installer's output and Cancel are in the window.
+  - A setup that was canceled or failed is picked up on the next start, and so is a new
+    KiPI that needs different packages. The launcher keeps its own logs.
+  - With no tkinter (KiCad's bundled Python has none) or `--console`, setup runs in the
+    terminal; with neither a window nor a terminal, a message says how to start it.
+  - `--setup`, `--add-pardiso`, `--remove-pardiso`, `--repair` and `--reset` manage the
+    environment, and `--create-shortcut` adds KiPI to the Start menu (Windows) or the
+    applications menu (Linux).
+  - **About → Manage dependencies…** in standalone KiPI closes KiPI, opens the setup, and
+    starts KiPI again afterwards.
+  - `python -m kipi` in a Python without KiPI's packages says which are missing and to use
+    the launcher, instead of a traceback.
 - **Where the board came from, and its placeholders.** The board summary in the Info box
   names the source ("From KiCad PCB editor 10.0.7") and the snapshot file it was opened from,
   and lists under *Placeholders* each value KiPI had to fill in because the source did not
@@ -53,6 +78,12 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   (`core/geometry/arcs.py`) and the default layer colors (`core/viz/layer_colors.py`).
   Results saved by earlier versions still open.
 - `kipi/host.py` says how KiPI was started; the entry points set it.
+- `kipi/launcher/` is the launcher, standard library only (a test checks).
+  `requirements-standalone.txt` is what it installs, and
+  `.github/scripts/dep_sizes.py` writes the package list it shows offline
+  (`kipi/launcher/deps_manifest.json`), for Windows, Linux and macOS; a test fails when
+  that list is stale. Linux on ARM is left out: Triangle has no prebuilt package there, so
+  pip builds it.
 
 ## 0.7.1
 
