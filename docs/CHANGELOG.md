@@ -154,6 +154,9 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   (`kipi/launcher/deps_manifest.json`), for Windows, Linux and macOS; a test fails when
   that list is stale. Linux on ARM is left out: Triangle has no prebuilt package there, so
   pip builds it.
+- The board heat model's log line names its direct solver, as the copper solves' lines
+  already did, and a test checks that DC and thermal solves both use PARDISO wherever it is
+  installed (#108).
 
 ## 0.7.2
 

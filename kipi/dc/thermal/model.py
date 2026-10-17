@@ -138,7 +138,8 @@ class BoardThermalModel:
         from kipi.core.solver import direct
         self._solve = direct.factorize(A, progress.warn)
         progress.info(f"Thermal grid {nx} x {ny} ({n} cells inside the board, {d:.2f} mm), "
-                      f"h = {settings.h_w_mm2_k() * 1e6:.1f} W/m²K per face")
+                      f"h = {settings.h_w_mm2_k() * 1e6:.1f} W/m²K per face, "
+                      f"direct solve ({self._solve.name})")
 
     # ------------------------------------------------------------------ heat
     def empty_heat(self) -> np.ndarray:

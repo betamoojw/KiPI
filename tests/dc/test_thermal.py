@@ -179,3 +179,22 @@ def test_a_layers_conductor_sets_its_heat_spreading():
     lam = 0.8e-3 * 1.5
     assert np.nanmax(copper.g) - lam == pytest.approx(0.39 * 0.035, rel=1e-6)
     assert np.nanmax(alu.g) - lam == pytest.approx(0.237 * 0.035, rel=1e-6)
+
+
+def test_dc_and_thermal_solves_use_the_direct_backend(monkeypatch):
+    # #108: both the copper and the heat systems go through kipi.core.solver.direct, so
+    # they get PARDISO wherever it is installed (SuperLU otherwise).
+    from kipi.core.solver import direct
+    names, factorize = [], direct.factorize
+
+    def spy(A, *a, **k):
+        f = factorize(A, *a, **k)
+        names.append(f.name)
+        return f
+
+    monkeypatch.setattr(direct, "factorize", spy)
+    snap = board()
+    solve_electrothermal(snap, setup("ldo"), ThermalSettings(enabled=True, iterations=2,
+                                                             grid_mm=0.5))
+    assert len(names) >= 3                          # the heat grid, then copper per pass
+    assert set(names) == {direct.backend()}
