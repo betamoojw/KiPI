@@ -127,13 +127,18 @@ class DcLink:
     esl_h: Optional[float] = None           # series inductance, henries (AC only)
 
 
+DEFAULT_VIA_CURRENT_LIMIT_A = 1.0
+
+
 @dataclass
 class PISetup:
     vrms: List[Vrm] = field(default_factory=list)
     loads: List[Load] = field(default_factory=list)
     links: List[DcLink] = field(default_factory=list)
     settings: SolveSettings = field(default_factory=SolveSettings)
-    via_current_limit_a: Optional[float] = None   # vias above this are flagged FAIL
+    # Vias above this are flagged FAIL; None = no limit. 1 A is a placeholder that suits a
+    # typical 0.3 mm via (#114).
+    via_current_limit_a: Optional[float] = DEFAULT_VIA_CURRENT_LIMIT_A
     thermal: ThermalSettings = field(default_factory=ThermalSettings)   # off by default
     html_report: bool = False                     # write an HTML report after solving
     # Nets ticked in the Board panel (the nets in scope). None = never chosen, so the
@@ -207,7 +212,7 @@ class PISetup:
             links=[DcLink(name=k["name"], side_a=pin(k["side_a"]), side_b=pin(k["side_b"]),
                           resistance=k["resistance"], esl_h=k.get("esl_h"))
                    for k in d.get("links", [])],
-            via_current_limit_a=d.get("via_current_limit_a"),
+            via_current_limit_a=d.get("via_current_limit_a", DEFAULT_VIA_CURRENT_LIMIT_A),
             thermal=ThermalSettings(**{k: v for k, v in d.get("thermal", {}).items()
                                        if k in {f.name for f in dataclasses.fields(ThermalSettings)}}),
             html_report=bool(d.get("html_report", False)),

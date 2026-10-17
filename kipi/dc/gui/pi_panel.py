@@ -36,8 +36,8 @@ from kipi.dc.pi.autofill import (
     next_phase_ref, other_net, setup_grounds,
 )
 from kipi.dc.pi.model import (
-    DcLink, Load, PinRef, PISetup, Vrm, VrmPhase, active_setup, group_name, net_groups,
-    validate,
+    DEFAULT_VIA_CURRENT_LIMIT_A, DcLink, Load, PinRef, PISetup, Vrm, VrmPhase, active_setup,
+    group_name, net_groups, validate,
 )
 from kipi.gui.sortable import make_sortable, reset_sort, set_row, sorted_rows
 from kipi.gui.unit_spin import UnitSpinBox
@@ -1329,7 +1329,7 @@ class PIPanel(QWidget):
         v.setContentsMargins(0, 0, 0, 0)
         row = QHBoxLayout()
         row.addWidget(QLabel("Current limit"))
-        self.spin_via_limit = _spin(0, 1e6, 0, 1, " mA", 10)
+        self.spin_via_limit = _spin(0, 1e6, DEFAULT_VIA_CURRENT_LIMIT_A * 1e3, 1, " mA", 10)
         self.spin_via_limit.setSpecialValueText("none")
         self.spin_via_limit.setToolTip("Vias carrying more than this are marked FAIL")
         self.spin_via_limit.valueChanged.connect(self._via_limit_changed)

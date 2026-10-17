@@ -115,6 +115,9 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   and field (temperature limits for every group) until **Auto**.
 
 ### Changed
+- The via current limit starts at 1 A rather than none, a placeholder that marks vias PASS or
+  FAIL from the first solve (#114). Set your fab's rating, or 0 for none. A setup saved
+  with no limit keeps none.
 - `python -m kipi` with no arguments starts standalone instead of connecting to the running
   KiCad. Use `KIPI_HOST=plugin python -m kipi` for the old behavior; `--dump` still
   extracts from the running KiCad.

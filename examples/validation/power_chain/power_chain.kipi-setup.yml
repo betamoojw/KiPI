@@ -148,7 +148,7 @@ settings:
   conductor_by_layer: {}
   tol: 1.0e-10
   max_iter: 2000
-via_current_limit_a: null
+via_current_limit_a: 1.0
 thermal:
   enabled: false
   ambient_c: 25.0

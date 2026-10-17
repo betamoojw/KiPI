@@ -964,8 +964,9 @@ scale, a minimum of zero or below falls back to four decades below the maximum.<
     current limit and PASS/FAIL; a gray row per phase under multi-phase VRMs.</td></tr>
   <tr><td><b>Series links</b></td><td class="wrap">Resistance, current and power in each
     part.</td></tr>
-  <tr><td><b>Vias</b></td><td class="wrap">Every via and PTH barrel, highest current first. Set
-    a <b>Current limit</b> for PASS/FAIL. Double-click a row to fly the camera to it.</td></tr>
+  <tr><td><b>Vias</b></td><td class="wrap">Every via and PTH barrel, highest current first. The
+    <b>Current limit</b> for PASS/FAIL starts at 1 A, a placeholder; set your own, or 0 for
+    none. Double-click a row to fly the camera to it.</td></tr>
   <tr><td><b>Losses</b></td><td class="wrap">Copper loss per group and layer, in vias and
     series parts, with the total and each VRM's conversion loss at the bottom.</td></tr>
   <tr><td><b>Thermal</b></td><td class="wrap">After an electro-thermal solve: the hottest copper
@@ -1456,8 +1457,8 @@ past a setup problem while you fix it.</p>
 <ol class="steps">
   <li>Thermal tab: tick <b>Electro-thermal co-simulation</b>, set ambient and airflow, and limits
     for maximum temperature and rise.</li>
-  <li>On the Vias results tab, set a <b>Current limit</b> per via (from your fab's via current
-    rating).</li>
+  <li>On the Vias results tab, set the <b>Current limit</b> per via from your fab's via current
+    rating (it starts at 1 A).</li>
   <li><b>Solve all (electro-thermal)</b>. Read the Thermal tab for the hottest point per layer,
     and sort the Vias tab by current for overloaded vias.</li>
   <li>Use the <b>Temperature</b> field to see the map; double-click a Thermal row to jump to its
