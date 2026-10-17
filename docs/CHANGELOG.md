@@ -50,6 +50,9 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
     starts KiPI again afterwards.
   - `python -m kipi` in a Python without KiPI's packages says which are missing and to use
     the launcher, instead of a traceback.
+- **About → Check for updates** (#97) asks GitHub for the newest tagged release and says
+  whether it is newer than the KiPI running, with a link to its release page. It only asks
+  when clicked; offline (or rate-limited) it says it could not reach GitHub.
 - **KiCad board files without KiCad.** Standalone **Open…** (and `python -m kipi
   board.kicad_pcb`) reads KiCad 7 to 10 `.kicad_pcb` files directly, giving the same board as
   the plugin reads from the running KiCad: the same stackup, copper, pad shapes and item ids,

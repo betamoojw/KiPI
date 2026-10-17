@@ -120,6 +120,57 @@ def fetch_stats(url: str = STATS_URL, timeout: float = STATS_TIMEOUT_S) -> Optio
     return data if parse_stats(data) is not None else None
 
 
+#: The newest tagged release, from GitHub's API (no token needed for a public repo).
+RELEASES_URL = "https://api.github.com/repos/drewsum/KiPI/releases/latest"
+
+
+def version_tuple(text: str) -> Optional[Tuple[int, ...]]:
+    """``"v0.7.2"`` -> (0, 7, 2); None if it is not a plain version."""
+    parts = text.strip().lstrip("vV").split(".")
+    try:
+        return tuple(int(p) for p in parts)
+    except ValueError:
+        return None
+
+
+def fetch_latest_release(url: str = RELEASES_URL,
+                         timeout: float = STATS_TIMEOUT_S) -> Optional[Tuple[str, str]]:
+    """``(tag, release page)`` of the newest release, or None if GitHub cannot be asked:
+    offline, a firewall, its rate limit, or a Python without CA certificates."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": f"KiPI/{__version__}",
+                                                   "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read(1 << 20))
+        return str(data["tag_name"]), str(data.get("html_url") or REPO + "/releases")
+    except Exception:          # any failure is said in the dialog instead
+        return None
+
+
+def update_text(latest: Optional[Tuple[str, str]], current: str = __version__) -> str:
+    """What the About dialog says once it has checked for updates (rich text)."""
+    if latest is None:
+        return ("Could not reach GitHub to check for updates; see "
+                f"<a href='{REPO}/releases'>the releases</a>.")
+    tag, url = latest
+    new, have = version_tuple(tag), version_tuple(current)
+    if new is not None and have is not None and new > have:
+        return (f"KiPI {html.escape(tag)} is available: "
+                f"<a href='{html.escape(url)}'>download it</a>.")
+    return f"KiPI {html.escape(current)} is up to date (the latest release is {html.escape(tag)})."
+
+
+class _UpdateCheck(QObject):
+    """Asks GitHub for the newest release on a daemon thread; ``ready`` arrives on the UI
+    thread."""
+
+    ready = Signal(object)    # (tag, url), or None
+
+    def start(self):
+        threading.Thread(target=lambda: self.ready.emit(fetch_latest_release()),
+                         name="kipi-update-check", daemon=True).start()
+
+
 def launcher_command() -> Optional[List[str]]:
     """The command that opens the launcher's setup once this KiPI has closed, or None if
     the launcher did not start this KiPI (as a plugin, or with ``python -m kipi``)."""
@@ -224,6 +275,14 @@ class AboutDialog(QDialog):
         col = QVBoxLayout()
         col.addWidget(text)
         col.addWidget(self.stats_label)
+        # What Check for updates found; hidden until it is asked.
+        self.update_label = QLabel(self)
+        self.update_label.setTextFormat(Qt.RichText)
+        self.update_label.setOpenExternalLinks(True)
+        self.update_label.setWordWrap(True)
+        self.update_label.setVisible(False)
+        col.addWidget(self.update_label)
+        self._update_check: Optional[_UpdateCheck] = None
         col.addStretch(1)
 
         top = QHBoxLayout()
@@ -236,6 +295,10 @@ class AboutDialog(QDialog):
         copy.setToolTip("Copy the versions above, for pasting into a bug report")
         copy.clicked.connect(lambda: QGuiApplication.clipboard().setText(info_text()))
         buttons.addButton(copy, QDialogButtonBox.ActionRole)
+        self.btn_update = QPushButton("Check for updates", self)
+        self.btn_update.setToolTip("Ask GitHub whether a newer KiPI has been released")
+        self.btn_update.clicked.connect(self.check_for_updates)
+        buttons.addButton(self.btn_update, QDialogButtonBox.ActionRole)
         if launcher_command() is not None:
             manage = QPushButton("Manage dependencies…", self)
             manage.setToolTip("Close KiPI and open its setup, to add or remove PARDISO or "
@@ -248,6 +311,22 @@ class AboutDialog(QDialog):
         lay.addLayout(top)
         lay.addWidget(buttons)
         self.setMinimumWidth(520)
+
+    def check_for_updates(self):
+        """Ask GitHub for the newest release, on a thread; the answer shows below."""
+        self.btn_update.setEnabled(False)
+        self.update_label.setText("Checking for updates…")
+        self.update_label.setVisible(True)
+        self._update_check = _UpdateCheck()
+        self._update_check.ready.connect(self._update_ready)
+        self._update_check.start()
+
+    def _update_ready(self, latest):
+        try:
+            self.update_label.setText(update_text(latest))
+            self.btn_update.setEnabled(True)
+        except RuntimeError:   # the dialog was deleted while the check ran
+            pass
 
     def _manage_dependencies(self):
         if QMessageBox.question(

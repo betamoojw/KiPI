@@ -152,3 +152,47 @@ def test_manage_dependencies_only_when_the_launcher_started_kipi(monkeypatch, tm
     assert cmd[cmd.index("--after-pid") + 1] == str(os.getpid())
     host.set_current(host.Host.PLUGIN)
     assert about.launcher_command() is None                 # the plugin's packages are KiCad's
+
+
+# --- Check for updates (#97) ------------------------------------------------------------------
+
+def test_versions_compare_as_numbers():
+    assert about.version_tuple("v0.10.0") > about.version_tuple("0.9.3")
+    assert about.version_tuple("V1.2") == (1, 2)
+    assert about.version_tuple("nightly") is None
+
+
+@pytest.mark.parametrize("latest,current,says", [
+    (("v0.8.1", "https://x/r"), "0.8.0", "KiPI v0.8.1 is available"),
+    (("v0.7.2", "https://x/r"), "0.8.0", "KiPI 0.8.0 is up to date"),     # ahead of releases
+    (("v0.8.0", "https://x/r"), "0.8.0", "KiPI 0.8.0 is up to date"),
+    (("nightly", "https://x/r"), "0.8.0", "KiPI 0.8.0 is up to date"),
+    (None, "0.8.0", "Could not reach GitHub"),
+])
+def test_update_text(latest, current, says):
+    assert says in about.update_text(latest, current)
+
+
+def test_fetch_latest_release_reads_the_api_and_fails_quietly(tmp_path):
+    good = tmp_path / "latest.json"
+    good.write_text(json.dumps({"tag_name": "v0.7.2", "html_url": "https://r"}))
+    assert about.fetch_latest_release(good.as_uri()) == ("v0.7.2", "https://r")
+    assert about.fetch_latest_release((tmp_path / "missing.json").as_uri()) is None
+    good.write_text("{}")                                    # not a release
+    assert about.fetch_latest_release(good.as_uri()) is None
+
+
+def test_check_for_updates_shows_the_answer(app, monkeypatch):
+    import time
+    monkeypatch.setattr(about, "fetch_latest_release",
+                        lambda *a, **k: ("v99.0.0", "https://example.org/r"))
+    d = about.AboutDialog()
+    assert not d.update_label.isVisibleTo(d)                 # nothing asked yet
+    d.check_for_updates()
+    assert not d.btn_update.isEnabled()
+    t0 = time.time()
+    while "available" not in d.update_label.text() and time.time() - t0 < 10:
+        app.processEvents()
+        time.sleep(0.01)
+    assert "KiPI v99.0.0 is available" in d.update_label.text()
+    assert "https://example.org/r" in d.update_label.text() and d.btn_update.isEnabled()
