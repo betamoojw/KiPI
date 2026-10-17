@@ -84,6 +84,7 @@ class Component:
     at: Point
     angle_deg: float
     side: str                           # "top" or "bottom"
+    part: str = ""                      # the part (package) name the job gives
     value: str = ""
     pins: List[Pin] = field(default_factory=list)
 
@@ -112,7 +113,8 @@ def parse_components(text: str, side: str, default_units: Units) -> List[Compone
         try:
             if tag == "CMP" and len(fields) >= 7:
                 comps.append(Component(ref=fields[6], at=_pt(units, fields[2], fields[3]),
-                                       angle_deg=(-float(fields[4])) % 360.0, side=side))
+                                       angle_deg=(-float(fields[4])) % 360.0, side=side,
+                                       part=fields[7] if len(fields) > 7 else ""))
             elif tag == "PRP" and comps and len(fields) >= 2:
                 name, _, rest = line[4:].partition(" ")
                 if name.lower() == "value":

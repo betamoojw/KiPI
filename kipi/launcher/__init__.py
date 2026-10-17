@@ -2,7 +2,7 @@
 KiPI in it.
 
 Everything in this package runs on the Python that started the launcher, before any of
-KiPI's dependencies exist, so it uses the standard library only (``tests/test_layering.py``
+KiPI's dependencies exist, so it uses the standard library only (``tests/core/test_layering.py``
 checks). It also has to get far enough on an older Python to say which one KiPI needs, so
 it keeps to syntax Python 3.8 understands.
 """

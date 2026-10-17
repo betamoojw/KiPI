@@ -321,7 +321,8 @@ def _read(job: Job, path: Path, progress: ProgressReporter, t0: float) -> BoardS
                 pads.extend(fp_pads)
                 footprints.append(Footprint(id=f"{comp.ref}", reference=comp.ref,
                                             value=comp.value, position=comp.at, side=comp.side,
-                                            pad_ids=[p.id for p in fp_pads]))
+                                            pad_ids=[p.id for p in fp_pads],
+                                            footprint=comp.part))
         progress.info(f"{len(footprints)} footprints, {len(pads)} pads")
     progress.check_cancel()
 

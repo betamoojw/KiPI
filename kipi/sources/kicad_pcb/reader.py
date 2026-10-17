@@ -22,7 +22,9 @@ from kipi.core.model.board import (
     BoardSnapshot, Footprint, Net, Pad, Poly, Stackup, Track, Via, Zone,
 )
 from kipi.core.model.layers import B_CU, F_CU, canonical_name, id_from_name
-from kipi.core.model.stackup import DEFAULT_INNER_CU_MM, DEFAULT_OUTER_CU_MM, build_stackup
+from kipi.core.model.stackup import (
+    DEFAULT_INNER_CU_MM, DEFAULT_OUTER_CU_MM, build_stackup, combined_epsilon_r,
+)
 from kipi.core.progress import NULL, ProgressReporter
 from kipi.sources.kicad_pcb import pads as padgeo, project as kproject
 from kipi.sources.kicad_pcb.items import (
@@ -122,8 +124,9 @@ def read_stackup(root: Node, names: Dict[int, str], progress: ProgressReporter,
         elif name.startswith("dielectric"):
             subs = _sublayers(layer)
             t = sum(number(s, "thickness") for s in subs)
-            entries.append(("diel", -1, t, value(subs[0], "material", "") or "",
-                            number(subs[0], "epsilon_r")))
+            er = combined_epsilon_r([(number(s, "thickness"), number(s, "epsilon_r"))
+                                     for s in subs])
+            entries.append(("diel", -1, t, value(subs[0], "material", "") or "", er))
     return build_stackup(entries, cu_ids, names, progress, assumed)
 
 
@@ -374,7 +377,8 @@ def read_footprints(root: Node, cu: Dict[int, str], nets: Nets, max_error: float
         footprints.append(Footprint(
             id=uuid(fp), reference=ref, value=_field(fp, "Value"), position=pos,
             side="bottom" if value(fp, "layer") == "B.Cu" else "top",
-            pad_ids=[p.id for p in fp_pads]))
+            pad_ids=[p.id for p in fp_pads],
+            footprint=fp[1] if len(fp) > 1 and type(fp[1]) is str else ""))
         drawn.extend((node, fp_frame) for node in drawn_items(fp, "fp_"))
     progress.info(f"{len(footprints)} footprints, {len(pads)} pads")
     return footprints, pads, drawn, trim

@@ -27,6 +27,7 @@ from kipi.core.model.board import BoardSnapshot
 from kipi.core.model.nets import classify_nets, sorted_nets
 from kipi.dc.gui.pi_panel import PIPanel
 from kipi.dc.pi.tree import fmt_drop
+from kipi.gui.stackup_window import StackupWindow
 from kipi.gui.viewer3d import Viewer3D
 from kipi.gui.worker import QtProgress, Task
 from kipi.host import Host, current as current_host
@@ -60,6 +61,7 @@ class MainWindow(QMainWindow):
         self._source = source
         self._tool = tool or InstalledTool()
         self.snapshot: Optional[BoardSnapshot] = None
+        self.power_tree_window = None
         self._copper_cache: Dict[str, Dict[int, object]] = {}
         self._task: Optional[Task] = None
         self._resync_pending = False   # net checkboxes changed while a task was running
@@ -89,8 +91,11 @@ class MainWindow(QMainWindow):
         self._model_timer.setSingleShot(True)
         self._model_timer.setInterval(300)
         self._model_timer.timeout.connect(self._sync_models)
+        self._model_timer.timeout.connect(self._sync_pi_markers)
         self._last_fraction_t = 0.0
         self._picked = None   # ("pad"|"via", id)
+        self._imported_stackup = None     # as read from KiCad, before any edits
+        self._pending_stackup = None      # edited while a task ran; applied after
         self.mode = "dc"
         # The board's files, watched so a board saved in its editor can be read again.
         self._watcher = QFileSystemWatcher(self)
@@ -102,14 +107,18 @@ class MainWindow(QMainWindow):
         self._asking_reload = False
         self._own_write_until = 0.0         # changes before this are KiPI's own saves
 
-        # The central area: the 3D view and, in AC mode, the impedance plot as a second tab.
+        # The central area: the 3D view and, in AC mode, the impedance plot and the board
+        # map of the solve (#67).
+        from kipi.ac.gui.board_map import BoardMap
         from kipi.ac.gui.plot import ImpedancePlot
         self.views = QTabWidget(self)
         self.views.setDocumentMode(True)
         self.viewer = Viewer3D(self.views)
         self.plot = ImpedancePlot(self.views)
+        self.board_map = BoardMap(self.views)
         self.views.addTab(self.viewer, "3D view")
         self.views.addTab(self.plot, "Impedance")
+        self.views.addTab(self.board_map, "Board map")
         self.setCentralWidget(self.views)
         self.viewer.on_click(self._on_click)
         self.plot.cursor_moved.connect(self._show_cursor)
@@ -119,6 +128,9 @@ class MainWindow(QMainWindow):
         self._build_left_panel()
         self._build_log_dock()
         self._build_solve_dock()
+        self.stackup_window = StackupWindow(self)
+        self.stackup_window.stackup_changed.connect(self._stackup_changed)
+        self.stackup_window.settings_changed.connect(self.solve_panel.setup_changed.emit)
         self._source_changed()
         self.statusBar().showMessage("Ready")
 
@@ -173,6 +185,12 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
         self.act_open_results = act("Open results…", self.open_results)
         self._set_open_results_tip()
+        self.act_stackup = act("Stackup", self.show_stackup,
+                               "The board's layers: thicknesses, εr and copper resistivity, "
+                               "for every analysis. Unlock to try another stackup.")
+        self.act_power_tree = act("Power tree", self.show_power_tree,
+                                  "Block diagram of the setup: VRMs (by type), rails, series "
+                                  "links, loads and capacitors, in the direction power flows")
         tb.addSeparator()
         self.act_help = act("Help", self.show_help, "Open the KiPI user guide in your browser (F1)")
         self.act_help.setShortcut("F1")
@@ -216,6 +234,7 @@ class MainWindow(QMainWindow):
         self.solve_dock.setWindowTitle(next(t for k, _, t in MODES if k == mode))
         self._set_open_results_tip()
         self._set_plot_tab_shown(mode == "ac")
+        self._sync_pi_markers()
         if mode == "dc":
             if self._tree:
                 self._show_group(self.solve_panel.cmb_group.currentText())
@@ -232,15 +251,16 @@ class MainWindow(QMainWindow):
             "Reopen saved AC impedance results (.kipi-ac-results); load the board first")
 
     def _set_plot_tab_shown(self, shown: bool):
-        """Show the impedance tab only in AC mode. QTabWidget.setTabVisible needs Qt 5.15;
-        older Qt disables the tab instead."""
-        i = self.views.indexOf(self.plot)
-        if hasattr(self.views, "setTabVisible"):
-            self.views.setTabVisible(i, shown)
-        else:
-            self.views.setTabEnabled(i, shown)
-        if not shown and self.views.currentIndex() == i:
-            self.views.setCurrentWidget(self.viewer)
+        """Show the impedance and board map tabs only in AC mode. QTabWidget.setTabVisible
+        needs Qt 5.15; older Qt disables the tabs instead."""
+        for w in (self.plot, self.board_map):
+            i = self.views.indexOf(w)
+            if hasattr(self.views, "setTabVisible"):
+                self.views.setTabVisible(i, shown)
+            else:
+                self.views.setTabEnabled(i, shown)
+            if not shown and self.views.currentIndex() == i:
+                self.views.setCurrentWidget(self.viewer)
 
     def _show_3d(self, then=None):
         """Bring the 3D view to the front (from the impedance tab), then run ``then``."""
@@ -258,6 +278,22 @@ class MainWindow(QMainWindow):
     def show_about(self):
         from kipi.gui.about import AboutDialog
         AboutDialog(self).exec()
+
+    def show_stackup(self):
+        self.stackup_window.show()
+        self.stackup_window.raise_()
+        self.stackup_window.activateWindow()
+
+    def show_power_tree(self):
+        from kipi.gui.power_tree import PowerTreeWindow
+        if self.power_tree_window is None:
+            self.power_tree_window = PowerTreeWindow(self)
+        self.power_tree_window.show_tree(self.solve_panel.setup, self.snapshot)
+
+    def _refresh_power_tree(self):
+        w = self.power_tree_window
+        if w is not None and w.isVisible():
+            w.set_source(self.solve_panel.setup, self.snapshot)
 
     def show_help(self):
         from kipi.gui.help import open_help
@@ -347,21 +383,33 @@ class MainWindow(QMainWindow):
         self.sld_opacity.valueChanged.connect(self._opacity_changed)
         opac.addWidget(self.sld_opacity, 1)
         opac.addWidget(self.lbl_opacity)
-        feats = QHBoxLayout()
+        feats = QVBoxLayout()
+        feat_rows = (QHBoxLayout(), QHBoxLayout())
+        for r in feat_rows:
+            feats.addLayout(r)
         feat_tips = {"vias": "Show via and plated-hole barrels",
                      "pads": "Show pads", "board": "Show the board outline and laminate",
+                     "pi": "Mark the DC setup's VRMs (green), loads (cyan), series "
+                           "links (magenta) and capacitors with a model (white) on the "
+                           "nets shown: a dot on each of their "
+                           "pads, larger on the rail and smaller on ground, and the "
+                           "part's name. In DC mode, over the copper only, not over "
+                           "results. Off to start with.",
                      "models": "Show the 3D models of the parts in the setup (VRMs, loads, "
                                "series links and capacitors) on the nets shown. KiCad's "
                                "kicad-cli reads them from the saved board file. The copper "
                                "and result views each remember this; over results they "
                                "start off."}
-        for name, label in (("vias", "Vias"), ("pads", "Pads"), ("board", "Board"),
-                            ("models", "Models")):
+        for k, (name, label) in enumerate((("vias", "Vias"), ("pads", "Pads"),
+                                           ("board", "Board"), ("pi", "PI Models"),
+                                           ("models", "3D Models"))):
             cb = QCheckBox(label, g_view)
-            cb.setChecked(True)
+            cb.setChecked(name != "pi")
             cb.setToolTip(feat_tips[name])
             cb.toggled.connect(lambda v, n=name: self.viewer.set_feature_visible(n, v))
-            feats.addWidget(cb)
+            feat_rows[k // 3].addWidget(cb)
+            if name == "pi":
+                self.chk_pi = cb
         self.chk_models = cb
         self.chk_models.setVisible(self._tool.offers_part_models)
         self.chk_models.toggled.connect(lambda _: self._model_timer.start())
@@ -372,23 +420,6 @@ class MainWindow(QMainWindow):
         fv.addRow("Z scale", self.spin_z)
         fv.addRow("Opacity", opac)
         fv.addRow(feats)
-        cut = QHBoxLayout()
-        self.cmb_cut = QComboBox(g_view)
-        self.cmb_cut.addItems(["Off", "X", "Y", "Z"])
-        self.cmb_cut.setToolTip("Cut the view with a plane across this axis, to look inside "
-                                "the stackup")
-        self.sld_cut = QSlider(Qt.Horizontal, g_view)
-        self.sld_cut.setRange(0, 1000)
-        self.sld_cut.setValue(500)
-        self.sld_cut.setToolTip("Where the cutting plane sits along its axis")
-        self.chk_cut_flip = QCheckBox("Flip", g_view)
-        self.chk_cut_flip.setToolTip("Keep the other side of the cutting plane")
-        for w in (self.cmb_cut, self.sld_cut, self.chk_cut_flip):
-            cut.addWidget(w, 1 if w is self.sld_cut else 0)
-        self.cmb_cut.currentIndexChanged.connect(self._cut_changed)
-        self.sld_cut.valueChanged.connect(self._cut_changed)
-        self.chk_cut_flip.toggled.connect(self._cut_changed)
-        fv.addRow("Cut", cut)
 
         # --- info
         g_info = QGroupBox("Info", panel)
@@ -439,6 +470,7 @@ class MainWindow(QMainWindow):
         self.ac_panel.results_saved.connect(lambda path: self.log(f"Saved AC results to {path}"))
         for panel in (self.solve_panel, self.ac_panel):
             panel.setup_changed.connect(self._model_timer.start)
+            panel.setup_changed.connect(self._refresh_power_tree)
         # One setup dock; it shows the panel of the current analysis mode.
         self.setup_stack = QStackedWidget(self)
         self.setup_stack.addWidget(self.solve_panel)
@@ -563,7 +595,10 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(1000)
         self.lbl_stage.setText("Idle")
         self.statusBar().showMessage("Ready")
-        if self._resync_pending:
+        if self._pending_stackup is not None:
+            st, self._pending_stackup = self._pending_stackup, None
+            QTimer.singleShot(0, lambda: self._stackup_changed(st))
+        elif self._resync_pending:
             self._resync_pending = False
             self._sync_timer.start()
         if pending is not None:
@@ -707,16 +742,19 @@ class MainWindow(QMainWindow):
                                               "KiPI snapshot (*.json.gz *.json)")
         if not path:
             return
+        import dataclasses
         from kipi.core.model.snapshot_io import save
         self._own_write_until = time.monotonic() + 2.0   # may be the file Reload reads
-        save(self.snapshot, path)
+        # A snapshot is the board as its source has it; edited thicknesses live in the setup.
+        save(dataclasses.replace(self.snapshot, stackup=self._imported_stackup
+                                 or self.snapshot.stackup), path)
         self.log(f"Snapshot saved to {path}")
 
     def save_screenshot(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "kipi.png", "PNG (*.png)")
         if path:
-            if self.views.currentWidget() is self.plot:
-                self.plot.save_png(path)
+            if self.views.currentWidget() in (self.plot, self.board_map):
+                self.views.currentWidget().save_png(path)
             else:
                 self.viewer.screenshot(path)
             self.log(f"Screenshot saved to {path}")
@@ -736,11 +774,14 @@ class MainWindow(QMainWindow):
         self.btn_select.setEnabled(False)
         self._set_title(snap.board_name)
         self._load_layer_colors(snap)
-        self._populate_layers()
         self._result = None
         self._tree = None
         self._scenes = {}
+        self._pending_stackup = None
         setup = self._load_setup(snap)
+        self._imported_stackup = snap.stackup
+        self._apply_setup_stackup(setup)
+        self._populate_layers()
         self._populate_nets(keep if keep is not None else setup.nets, setup)
         self._show_board_summary()
         from kipi.core.viz.meshes import board_body
@@ -761,6 +802,8 @@ class MainWindow(QMainWindow):
     def _populate_layers(self):
         from kipi.core.viz.meshes import layer_color
         st = self.snapshot.stackup
+        hidden = {self.layer_list.item(i).data(Qt.UserRole) for i in range(self.layer_list.count())
+                  if self.layer_list.item(i).checkState() != Qt.Checked}
         self.layer_list.blockSignals(True)
         self.layer_list.clear()
         for cu in st.copper:
@@ -771,7 +814,7 @@ class MainWindow(QMainWindow):
             pm.fill(QColor.fromRgbF(r, g, b))
             it.setIcon(QIcon(pm))
             it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
-            it.setCheckState(Qt.Checked)
+            it.setCheckState(Qt.Unchecked if cu.id in hidden else Qt.Checked)
             it.setData(Qt.UserRole, cu.id)
             self.layer_list.addItem(it)
         self.layer_list.blockSignals(False)
@@ -936,6 +979,18 @@ class MainWindow(QMainWindow):
             task.canceled.connect(lambda: self._set_checked(
                 lambda it: it.data(Qt.UserRole) in self.viewer.nets()))
 
+    # ============================================================ PI Models markers
+    def _sync_pi_markers(self):
+        """Mark the DC setup's VRMs, loads, series links and capacitors on the ticked nets
+        (#84). The
+        markers belong to DC mode: AC mode's view has none."""
+        if self._closed:
+            return
+        from kipi.dc.viz.markers import pi_markers
+        markers = (pi_markers(self.snapshot, self.solve_panel.setup, self._checked_set())
+                   if self.mode == "dc" and self.snapshot is not None else [])
+        self.viewer.set_pi_markers(markers)
+
     # ============================================================ part models
     def _wanted_models(self) -> List[str]:
         """Parts in the setup with a pad on a ticked net, like the copper drawn."""
@@ -960,7 +1015,9 @@ class MainWindow(QMainWindow):
         side = {f.reference: f.side for f in snap.footprints}
         shown = {r: (self._model_cache[r], side.get(r, "top")) for r in wanted
                  if self._model_cache.get(r) is not None}
-        self.viewer.set_models(shown, snap.stackup.board_thickness_mm)
+        kicad = self._imported_stackup or snap.stackup
+        self.viewer.set_models(shown, snap.stackup.board_thickness_mm,
+                               kicad.board_thickness_mm)
 
     def _models_source(self):
         """The board's :class:`~kipi.sources.base.ModelProvider`, or False (and why, said
@@ -1034,7 +1091,9 @@ class MainWindow(QMainWindow):
         self._setup_path = path
         self.solve_panel.set_board(snap, setup, label)
         self.ac_panel.set_board(snap, setup, label)
+        self._refresh_power_tree()
         self.plot.clear()
+        self.board_map.clear()
         return setup
 
     def _save_setup(self):
@@ -1067,7 +1126,8 @@ class MainWindow(QMainWindow):
         frozen = copy.deepcopy(setup)     # edits during the solve don't affect it
         report_path = None
         if frozen.html_report and self._setup_path is not None:
-            report_path = self._setup_path.parent / f"{self._results_stem()}_kipi_report.html"
+            from kipi.dc.report.html import report_name
+            report_path = self._setup_path.parent / report_name(self._results_stem())
 
         def work(progress):
             from kipi.core.mesh.mesher import MeshError
@@ -1107,6 +1167,7 @@ class MainWindow(QMainWindow):
                 return
             self._tree, self._scenes = tree, scenes
             self.solve_panel.set_report(getattr(tree, "report_path", None))
+            self._open_new_report(getattr(tree, "report_path", None))
             first = tree.loads[0].group if tree.loads else next(iter(tree.groups))
             self.solve_panel.show_results(tree, first)
             self._show_group(first)
@@ -1116,6 +1177,16 @@ class MainWindow(QMainWindow):
 
         if self._run(work, done, "Solving power tree") is not None:
             self.solve_panel.set_busy(True)
+
+    def _open_new_report(self, path):
+        """Open a report a solve just wrote in the default browser."""
+        if path is None:
+            return
+        from kipi.gui.browser import open_in_browser
+        if open_in_browser(path):
+            self.log(f"Opened the report in the web browser: {path}")
+        else:
+            self.log(f"Could not open a web browser; the report is at {path}")
 
     # ------------------------------------------------------------ AC solve
     def run_ac_solve(self, setup, vrm_name: str, gnd: str):
@@ -1160,8 +1231,16 @@ class MainWindow(QMainWindow):
                 self.ac_panel.show_error(error)
                 return
             self.ac_panel.show_result(result)
+            self._open_new_report(getattr(result, "report_path", None))
 
-        if self._run(work, done, "AC impedance solve") is not None:
+        def partial(board_map):
+            """The solve's board map as it fills: shown while the rail solves."""
+            first = self.board_map.board_map is not board_map
+            self.board_map.set_map(board_map)
+            if first and self.mode == "ac":
+                self.views.setCurrentWidget(self.board_map)
+
+        if self._run(work, done, "AC impedance solve", on_partial=partial) is not None:
             self.ac_panel.set_busy(True)
 
     def _show_ac_result(self, result):
@@ -1169,8 +1248,11 @@ class MainWindow(QMainWindow):
         that rail has not been solved)."""
         if result is None:
             self.plot.clear()
+            self.board_map.clear()
             return
         self.plot.set_result(result)
+        if self.board_map.board_map is not getattr(result, "board_map", None):
+            self.board_map.set_map(getattr(result, "board_map", None))  # None: saved before 0.7.2
         self.views.setCurrentWidget(self.plot)
 
     def _show_cursor(self, text: str):
@@ -1181,12 +1263,57 @@ class MainWindow(QMainWindow):
         self.btn_select.setEnabled(False)
         self.info.setHtml(text)
 
-    def _cut_changed(self, *_):
-        axis = self.cmb_cut.currentText().lower()
-        self.sld_cut.setEnabled(axis != "off")
-        self.chk_cut_flip.setEnabled(axis != "off")
-        self.viewer.set_clip(None if axis == "off" else axis, self.sld_cut.value() / 1000,
-                             self.chk_cut_flip.isChecked())
+    # ------------------------------------------------------------ stackup
+    def _layer_colors(self):
+        from kipi.core.viz.meshes import layer_color
+        st = self.snapshot.stackup
+        return {cu.id: layer_color(cu, len(st.copper)) for cu in st.copper}
+
+    def _apply_setup_stackup(self, setup):
+        """Use the stackup edits kept in the setup file, if they still fit the board."""
+        from kipi.core.model.stackup import from_setup
+        snap = self.snapshot
+        edited, why = from_setup(self._imported_stackup, setup.stackup)
+        if edited is not None:
+            snap.stackup = edited
+            self.log(f"Stackup: using the stackup edited in KiPI "
+                     f"({edited.board_thickness_mm:.3f} mm board; "
+                     f"KiCad has {self._imported_stackup.board_thickness_mm:.3f} mm)")
+        elif why:
+            setup.stackup = None
+            self.log(f"Stackup: the setup's edited stackup no longer fits the board "
+                     f"({why}); using KiCad's", logging.WARNING)
+        self.stackup_window.set_board(self._imported_stackup, snap.stackup, setup,
+                                      self._layer_colors())
+
+    def _stackup_changed(self, st):
+        """Use an edited stackup (or KiCad's again) for the views and every analysis."""
+        snap = self.snapshot
+        if snap is None or st is snap.stackup:
+            return
+        if self._busy():
+            # A solve may be reading the stackup: change it when the task is done.
+            self._pending_stackup = st
+            self.log("Stackup change waits for the current task to finish")
+            return
+        from kipi.core.model.stackup import to_setup
+        from kipi.core.viz.meshes import board_body
+        snap.stackup = st
+        self.solve_panel.setup.stackup = to_setup(st) if st.edited else None
+        self.log(f"Stackup: {'edited in KiPI' if st.edited else 'from KiCad'}, "
+                 f"{st.board_thickness_mm:.3f} mm board"
+                 + ("; solve again for results with it" if self._tree is not None else ""))
+        if self._tree is not None:
+            self._tree, self._scenes = None, {}
+            self.solve_panel.clear_results()
+        self._populate_layers()
+        self._show_board_summary()
+        self.viewer.set_board(*board_body(snap), reset_view=False)
+        for i in range(self.layer_list.count()):
+            it = self.layer_list.item(i)
+            if it.checkState() != Qt.Checked:
+                self.viewer.set_layer_visible(it.data(Qt.UserRole), False)
+        self.sync_nets()
 
     def _show_via(self, group: str, owner_id: str):
         """Jump to a via from the results table: show its group, center and select it."""
@@ -1209,12 +1336,14 @@ class MainWindow(QMainWindow):
     def _export(self, kind: str):
         if not self._tree:
             return
+        from kipi.core.naming import stamped
         from kipi.dc.pi import report
         start = str(self._setup_path.parent) if self._setup_path else ""
         try:
             if kind == "results":
                 path, _ = QFileDialog.getSaveFileName(
-                    self, "Save results", str(Path(start) / f"{self._results_stem()}.kipi-results"),
+                    self, "Save results",
+                    str(Path(start) / f"{stamped(self._results_stem())}.kipi-results"),
                     "KiPI results (*.kipi-results)")
                 if path:
                     report.save_results(path, self._tree, self._scenes, self.snapshot,
@@ -1332,7 +1461,8 @@ class MainWindow(QMainWindow):
             f"<small>From {html.escape(origin)}</small><br><br>"
             f"{assumed}"
             f"Board thickness: {st.board_thickness_mm:.3f} mm"
-            f"{'' if st.from_board else ' <i>(default stackup)</i>'}<br>"
+            f"{'' if st.from_board else ' <i>(default stackup)</i>'}"
+            f"{' <i>(edited in KiPI)</i>' if st.edited else ''}<br>"
             f"Nets: {len(s.nets)} ({n_pwr} power, {n_gnd} ground)<br>"
             f"Tracks: {len(s.tracks)} &nbsp; Vias: {len(s.vias)} &nbsp; Pads: {len(s.pads)}<br>"
             f"Zones: {len(s.zones)} &nbsp; Footprints: {len(s.footprints)}<br><br>"

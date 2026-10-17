@@ -27,6 +27,21 @@ def plugin_host(monkeypatch):
     monkeypatch.setattr(host, "_current", host.Host.PLUGIN)
 
 
+@pytest.fixture(autouse=True)
+def opened_in_browser(monkeypatch):
+    """Tests never open a real web browser: what would be opened is recorded here."""
+    import webbrowser
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", lambda uri, *a, **k: opened.append(uri) or True)
+    try:
+        from qtpy.QtGui import QDesktopServices
+    except Exception:                       # no Qt binding: nothing else can open one
+        return opened
+    monkeypatch.setattr(QDesktopServices, "openUrl",
+                        lambda url: opened.append(url.toLocalFile()) or True)
+    return opened
+
+
 @pytest.fixture
 def no_3d(monkeypatch):
     """Build MainWindow with a stand-in for the 3D view.

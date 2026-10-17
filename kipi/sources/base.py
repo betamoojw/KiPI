@@ -10,7 +10,7 @@ Two things are kept apart:
   how the board was read; a snapshot opened from disk still shows KiCad's colors and
   models when KiCad is installed.
 
-The window only sees these interfaces, never a concrete source (``tests/test_layering.py``).
+The window only sees these interfaces, never a concrete source (``tests/core/test_layering.py``).
 """
 
 from __future__ import annotations

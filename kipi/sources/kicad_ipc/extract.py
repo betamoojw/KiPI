@@ -17,7 +17,7 @@ from kipi.sources.kicad_ipc.copper_shapes import copper_shape_zones
 from kipi.core.model.board import (
     BoardSnapshot, Footprint, Net, Pad, Poly, Stackup, Track, Via, Zone,
 )
-from kipi.core.model.stackup import build_stackup
+from kipi.core.model.stackup import build_stackup, combined_epsilon_r
 from kipi.core.progress import NULL, ProgressReporter
 
 
@@ -178,7 +178,7 @@ def extract_stackup(board, progress: ProgressReporter = NULL,
                 subs = diel.layers if diel is not None else []
                 t = sum(mm(s.thickness) for s in subs) or mm(sl.thickness)
                 mat = subs[0].material_name if subs else sl.material_name
-                er = subs[0].epsilon_r if subs else 0.0
+                er = combined_epsilon_r([(mm(s.thickness), s.epsilon_r) for s in subs])
                 entries.append(("diel", -1, t, mat, er))
     except Exception as e:  # noqa: BLE001 - stackup is optional; fall back below
         progress.warn(f"Could not read board stackup layers ({e}); using defaults")
@@ -220,6 +220,16 @@ def _field_text(field) -> str:
             return field.text.as_text().value
         except Exception:  # noqa: BLE001
             return ""
+
+
+def _footprint_name(fp) -> str:
+    """'library:name' of a footprint instance, or "" if this kicad-python can't tell."""
+    try:
+        lib_id = fp.definition.id
+        lib, name = lib_id.library, lib_id.name
+    except Exception:  # noqa: BLE001
+        return ""
+    return f"{lib}:{name}" if lib and name else name or ""
 
 
 def _pad_shapes(board, pads, layer_ids: Iterable[int], progress,
@@ -432,7 +442,7 @@ def extract_board(board, refill_zones: bool = False,
                 id=fp.id.value, reference=ref, value=_field_text(fp.value_field),
                 position=pt(fp.position),
                 side="bottom" if fp.layer == BoardLayer.BL_B_Cu else "top",
-                pad_ids=[p.id.value for p in fpads]))
+                pad_ids=[p.id.value for p in fpads], footprint=_footprint_name(fp)))
             for p in fpads:
                 pad_ref[p.id.value] = ref
             kpads.extend(fpads)
