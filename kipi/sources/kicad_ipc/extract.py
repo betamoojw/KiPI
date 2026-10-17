@@ -11,7 +11,7 @@ import time
 from typing import Dict, Iterable, List, Optional
 
 from kipi.core.geometry.arcs import arc_points
-from kipi.core.geometry.copper import shapely_to_polys
+from kipi.core.geometry.shapes import board_outline
 from kipi.sources.kicad_ipc.convert import mm, poly, pt
 from kipi.sources.kicad_ipc.copper_shapes import copper_shape_zones
 from kipi.core.model.board import (
@@ -284,7 +284,6 @@ def _outline(board_shapes, progress) -> List[Poly]:
     from kipy.proto.board.board_types_pb2 import BoardLayer
     try:
         from shapely.geometry import LineString, Point as SPoint, Polygon as SPolygon
-        from shapely.ops import polygonize, unary_union
     except ImportError:
         return []
 
@@ -307,17 +306,7 @@ def _outline(board_shapes, progress) -> List[Poly]:
             for pwh in s.polygons:
                 p = poly(pwh)
                 closed.append(SPolygon(p.outline, p.holes))
-    polys = list(polygonize(unary_union(lines))) if lines else []
-    polys += closed
-    if not polys:
-        progress.warn("No closed board outline found on Edge.Cuts")
-        return []
-    # Even-odd: the largest polygon is the board, the others inside it are cutouts.
-    polys.sort(key=lambda p: p.area, reverse=True)
-    board_poly = polys[0]
-    for p in polys[1:]:
-        board_poly = board_poly.symmetric_difference(p)
-    return shapely_to_polys(board_poly)
+    return board_outline(lines, closed, progress)
 
 
 def _kicad_busy(board) -> bool:

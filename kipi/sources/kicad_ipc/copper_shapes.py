@@ -16,43 +16,10 @@ from typing import Iterable, List, Optional, Sequence
 
 from kipi.core.geometry.arcs import arc_points
 from kipi.core.geometry.copper import shapely_to_polys
+from kipi.core.geometry.shapes import SHAPE_QUAD_SEGS, area, bezier_points, stroke
 from kipi.sources.kicad_ipc.convert import mm, poly, pt
 from kipi.core.model.board import Zone
 from kipi.core.progress import ProgressReporter
-
-BEZIER_SEGMENTS = 32
-SHAPE_QUAD_SEGS = 8          # stroke end caps and circles: 32 segments per circle
-
-
-def _bezier_points(p0, p1, p2, p3) -> List[tuple]:
-    pts = []
-    for i in range(BEZIER_SEGMENTS + 1):
-        t = i / BEZIER_SEGMENTS
-        a, b, c, d = (1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t ** 2, t ** 3
-        pts.append((a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
-                    a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1]))
-    return pts
-
-
-def _stroke(line_pts: Sequence[tuple], width_mm: float):
-    """A stroked open path: the path widened by its stroke, with round ends (as KiCad)."""
-    from shapely.geometry import LineString
-    if width_mm <= 0 or len(line_pts) < 2:
-        return None
-    return LineString(line_pts).buffer(width_mm / 2.0, quad_segs=SHAPE_QUAD_SEGS)
-
-
-def _area(area, width_mm: float, filled: bool):
-    """A closed shape: its interior when filled, plus its stroke along the boundary."""
-    parts = []
-    if filled:
-        parts.append(area)
-    if width_mm > 0:
-        parts.append(area.boundary.buffer(width_mm / 2.0, quad_segs=SHAPE_QUAD_SEGS))
-    if not parts:
-        return None
-    from shapely.ops import unary_union
-    return unary_union(parts)
 
 
 def shape_geometry(shape) -> Optional[object]:
@@ -66,25 +33,25 @@ def shape_geometry(shape) -> Optional[object]:
     width = mm(attrs.stroke.width)
     filled = attrs.fill.filled
     if isinstance(shape, BoardSegment):
-        return _stroke([pt(shape.start), pt(shape.end)], width)
+        return stroke([pt(shape.start), pt(shape.end)], width)
     if isinstance(shape, BoardArc):
         st, md, en = pt(shape.start), pt(shape.mid), pt(shape.end)
-        return _stroke([st] + arc_points(st, md, en), width)
+        return stroke([st] + arc_points(st, md, en), width)
     if isinstance(shape, BoardBezier):
-        return _stroke(_bezier_points(pt(shape.start), pt(shape.control1),
+        return stroke(bezier_points(pt(shape.start), pt(shape.control1),
                                       pt(shape.control2), pt(shape.end)), width)
     if isinstance(shape, BoardCircle):
         disc = SPoint(pt(shape.center)).buffer(mm(shape.radius()), quad_segs=SHAPE_QUAD_SEGS)
-        return _area(disc, width, filled)
+        return area(disc, width, filled)
     if isinstance(shape, BoardRectangle):
         (x1, y1), (x2, y2) = pt(shape.top_left), pt(shape.bottom_right)
-        return _area(SPolygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)]), width, filled)
+        return area(SPolygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)]), width, filled)
     if isinstance(shape, BoardPolygon):
         parts = []
         for pwh in shape.polygons:
             p = poly(pwh)
             if len(p.outline) >= 3:
-                parts.append(_area(SPolygon(p.outline, p.holes), width, filled))
+                parts.append(area(SPolygon(p.outline, p.holes), width, filled))
         parts = [g for g in parts if g is not None]
         return unary_union(parts) if parts else None
     return None
