@@ -15,15 +15,21 @@ plot between ``(frequency, impedance)`` corner points.
 The AC solve leaves the VRM out of circuit: it computes the *open-loop* PDN impedance.
 Below the converter's control loop bandwidth the loop holds the rail, so a target only
 applies above the VRM's bandwidth (:func:`judged_from`).
+
+The calculator's AC tolerance can be copied from a DC load's tolerance
+(:func:`load_tolerances`): +/- that percentage of the voltage of the VRM feeding the load.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from kipi.dc.pi.model import PinRef, PISetup
 
 
 @dataclass
@@ -113,3 +119,40 @@ def _hz(f: float) -> str:
         if f >= scale * 0.9995:
             return f"{f / scale:.4g} {unit}"
     return f"{f:.4g} Hz"
+
+
+@dataclass
+class LoadTolerance:
+    name: str             # the DC load's name
+    pct: float            # its tolerance, +/- % of nominal
+    nominal_v: float      # the set point of the VRM feeding it
+
+    @property
+    def v_ac_v(self) -> float:
+        return abs(self.nominal_v) * self.pct / 100.0
+
+    def label(self) -> str:
+        return f"{self.name}: ±{self.pct:g} % of {self.nominal_v:g} V"
+
+
+def load_tolerances(setup: "PISetup", rail: Optional["PinRef"] = None) -> List[LoadTolerance]:
+    """DC loads with a tolerance and a VRM feeding their rail. With the probe's supply pins
+    ``rail``, only loads on that rail (its nets joined by series links), the probe's own
+    part first."""
+    from kipi.dc.pi.model import net_groups
+    groups = net_groups(setup, [rail.net] if rail else [])
+    out = []
+    for load in setup.loads:
+        if not load.tolerance_pct:
+            continue
+        group = groups[load.supply.net]
+        if rail and rail.net not in group:
+            continue
+        vrm = next((v for v in setup.vrms
+                    if v.voltage and any(ph.output.net in group for ph in v.all_phases())), None)
+        if vrm:
+            out.append(LoadTolerance(load.name, load.tolerance_pct, vrm.voltage))
+    if rail:
+        own = {l.name for l in setup.loads if l.supply.ref == rail.ref}
+        out.sort(key=lambda t: t.name not in own)
+    return out

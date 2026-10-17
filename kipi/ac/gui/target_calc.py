@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLabel, QVBoxLayout, QWidget
+from qtpy.QtWidgets import (
+    QDialog, QDialogButtonBox, QFormLayout, QLabel, QMenu, QPushButton, QVBoxLayout, QWidget,
+)
 
 from kipi.ac.gui.plot import _eng
-from kipi.ac.target import Target, target_from_transient
+from kipi.ac.target import LoadTolerance, Target, target_from_transient
 from kipi.dc.gui.pi_panel import _spin
 
 NOTE = ("Z<sub>target</sub> = V<sub>AC</sub> / I<sub>step</sub>, flat up to "
@@ -27,7 +29,8 @@ class TargetCalculator(QDialog):
     # The inputs last applied, offered again the next time the calculator opens.
     last: Tuple[float, float, float] = (0.0, 0.0, 0.0)
 
-    def __init__(self, parent: Optional[QWidget] = None, probe_name: str = ""):
+    def __init__(self, parent: Optional[QWidget] = None, probe_name: str = "",
+                 loads: Optional[List[LoadTolerance]] = None):
         super().__init__(parent)
         self.setWindowTitle("Target Impedance/Frequency Calculator"
                             + (f": {probe_name}" if probe_name else ""))
@@ -44,12 +47,32 @@ class TargetCalculator(QDialog):
             s.setValue(v)
             s.valueChanged.connect(self._update)
 
+        # Copy the AC tolerance from a DC load's tolerance (#87); a menu when several fit.
+        self.loads = list(loads or [])
+        self.btn_copy = QPushButton("Copy tolerance from DC load")
+        if not self.loads:
+            self.btn_copy.setEnabled(False)
+            self.btn_copy.setToolTip("No DC load on this probe's rail has a tolerance and a "
+                                     "VRM feeding it")
+        else:
+            self.btn_copy.setToolTip("Fill in the AC voltage tolerance from a DC load's "
+                                     "tolerance: ± that % of its VRM's voltage. That is the "
+                                     "whole tolerance; the DC drop uses up part of it.")
+            if len(self.loads) == 1:
+                self.btn_copy.clicked.connect(lambda: self.copy_tolerance(self.loads[0]))
+            else:
+                menu = QMenu(self.btn_copy)
+                for t in self.loads:
+                    menu.addAction(t.label(), lambda t=t: self.copy_tolerance(t))
+                self.btn_copy.setMenu(menu)
+
         self.lbl_z, self.lbl_t, self.lbl_f = QLabel(), QLabel(), QLabel()
         for lbl in (self.lbl_z, self.lbl_t, self.lbl_f):
             lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         form = QFormLayout()
         form.addRow("AC voltage tolerance", self.v_ac)
+        form.addRow("", self.btn_copy)
         form.addRow("Load step (ΔI)", self.i_step)
         form.addRow("Load step slew rate", self.slew)
         form.addRow(QLabel(""))
@@ -79,6 +102,9 @@ class TargetCalculator(QDialog):
         lay.addWidget(self.buttons)
         self.setMinimumWidth(420)
         self._update()
+
+    def copy_tolerance(self, t: LoadTolerance):
+        self.v_ac.setValue(t.v_ac_v * 1e3)
 
     def target(self) -> Optional[Target]:
         return target_from_transient(self.v_ac.value() * 1e-3, self.i_step.value(),

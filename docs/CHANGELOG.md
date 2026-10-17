@@ -87,6 +87,9 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   give it: a default stackup, a 2-layer guess from a KiCad too old to list its layers, or
   pads kept on every layer when KiCad cannot say which layers plated pads are on. Snapshots
   keep both; older snapshots read as coming from KiCad.
+- The Target Impedance/Frequency Calculator has a **Copy tolerance from DC load** button. It
+  fills the AC voltage tolerance from a DC load on the probe's rail: ± its tolerance % of the
+  voltage of the VRM feeding it (#87).
 
 ### Changed
 - `python -m kipi` with no arguments starts standalone instead of connecting to the running

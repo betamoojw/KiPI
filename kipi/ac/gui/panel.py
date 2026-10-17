@@ -395,7 +395,9 @@ class ProbeEditor(_Editor):
 
     def _calculator(self):
         from kipi.ac.gui.target_calc import TargetCalculator
-        dlg = TargetCalculator(self, self.name.text().strip())
+        from kipi.ac.target import load_tolerances
+        dlg = TargetCalculator(self, self.name.text().strip(),
+                               load_tolerances(self.panel.setup, self.rail.value() or self.obj.rail))
         if dlg.exec() and dlg.target() is not None:
             self.apply_target(dlg.target())
 

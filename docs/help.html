@@ -1149,6 +1149,11 @@ whole range, as if the VRM had no bandwidth, and a note in the results says so.<
 <ul>
   <li><b>AC voltage tolerance</b>: how far the supply may move during a load transient, e.g.
     the AC part of a ±3 % spec on a 0.9 V rail: 27 mV.</li>
+  <li><b>Copy tolerance from DC load</b> fills the AC voltage tolerance from a DC load's
+    tolerance: ± that percentage of the voltage of the VRM feeding it. It offers the loads on
+    the probe's rail (including nets joined by series links), the probe's own part first, and
+    shows a menu when there are several. A DC tolerance is the whole budget, and the DC drop
+    uses up part of it, so lower the value if the AC part is smaller.</li>
   <li><b>Load step (ΔI)</b>: the size of the current step.</li>
   <li><b>Load step slew rate</b>: how fast it steps, A/µs.</li>
 </ul>
