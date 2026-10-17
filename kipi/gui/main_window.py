@@ -395,9 +395,10 @@ class MainWindow(QMainWindow):
                            "nets shown: a dot on each of their "
                            "pads, larger on the rail and smaller on ground, and the "
                            "part's name. In DC mode, over the copper only, not over "
-                           "results. Off to start with.",
-                     "models": "Show the 3D models of the parts in the setup (VRMs, loads, "
-                               "series links and capacitors) on the nets shown. KiCad's "
+                           "results. Off to start with. The part selected in the setup "
+                           "is marked in amber, and clicking a part's name selects it "
+                           "there.",
+                     "models": "Show the 3D models of every part on the board. KiCad's "
                                "kicad-cli reads them from the saved board file. The copper "
                                "and result views each remember this; over results they "
                                "start off."}
@@ -461,6 +462,7 @@ class MainWindow(QMainWindow):
         self.solve_panel.save_requested.connect(self._save_setup)
         self.solve_panel.arrows_toggled.connect(self.viewer.set_arrows_visible)
         self.solve_panel.via_selected.connect(self._show_via)
+        self.solve_panel.part_selected.connect(self._pi_part_selected)
         self.solve_panel.export_requested.connect(self._export)
         self._tree = None
         self._scenes = {}
@@ -994,15 +996,31 @@ class MainWindow(QMainWindow):
                    if self.mode == "dc" and self.snapshot is not None else [])
         self.viewer.set_pi_markers(markers)
 
+    def _pi_part_selected(self, kind: str, name: str, by_user: bool):
+        """Mark the VRM, load or series link selected in the setup in the 3D view. One the
+        user picked also shows the PI Models markers and brings the view to it (#96)."""
+        self.viewer.set_pi_selected((kind, name) if kind else None)
+        if not by_user or not kind or self.mode != "dc":
+            return
+        if not self.chk_pi.isChecked():
+            self.chk_pi.setChecked(True)
+        m = next((m for m in self.viewer.pi_markers if (m.kind, m.item) == (kind, name)),
+                 None)
+        if m is None:
+            self.statusBar().showMessage(f"{name} has no pads on the nets shown", 5000)
+            return
+        self.viewer.focus_on(np.vstack([m.power, m.ground]))
+
     # ============================================================ part models
     def _wanted_models(self) -> List[str]:
-        """Parts in the setup with a pad on a ticked net, like the copper drawn."""
+        """Every part on the board, when either view shows models (#96)."""
         snap = self.snapshot
         if snap is None or not self.viewer.models_wanted:
             return []
-        on_nets = {p.footprint for net in self._checked_set()
-                   for p in snap.items_on_net(net)[2]}
-        return sorted(self.solve_panel.setup.part_refs() & on_nets)
+        # Pads name their parts too: snapshots from before footprints were saved list none.
+        refs = {f.reference for f in snap.footprints} | {p.footprint for p in snap.pads}
+        refs.discard("")
+        return sorted(refs)
 
     def _sync_models(self):
         """Show the models of the wanted parts, loading those not seen yet."""
@@ -1600,6 +1618,11 @@ class MainWindow(QMainWindow):
 
     def _on_click(self, pt, screen_xy):
         if self.snapshot is None:
+            return
+        # A PI Models name (or dot) selects its VRM, load or series link in the setup (#96).
+        marker = self.viewer.pi_marker_at(screen_xy) if self.mode == "dc" else None
+        if marker is not None and self.solve_panel.select_part(marker.kind, marker.item):
+            self.statusBar().showMessage(f"Selected {marker.name} in the setup", 5000)
             return
         segs, ids = self._via_candidates()
         via_id = None

@@ -113,11 +113,11 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
 - Editable **color scale** limits (#101). The Results pane has a minimum and maximum for the
   3D color scale, starting on the result's whole range; typed limits are kept per net group
   and field (temperature limits for every group) until **Auto**.
+- The VRM, load or series link selected in the setup is marked in amber in the 3D view.
+  Clicking it in its list ticks **PI Models** and brings the view to it, and clicking a
+  part's name (or dot) in 3D selects it in the setup (#96).
 
 ### Changed
-- The via current limit starts at 1 A rather than none, a placeholder that marks vias PASS or
-  FAIL from the first solve (#114). Set your fab's rating, or 0 for none. A setup saved
-  with no limit keeps none.
 - `python -m kipi` with no arguments starts standalone instead of connecting to the running
   KiCad. Use `KIPI_HOST=plugin python -m kipi` for the old behavior; `--dump` still
   extracts from the running KiCad.
@@ -173,6 +173,11 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   - DC results files are named for what was solved: `.kipi-dc-results`, or
     `.kipi-dc-thermal-results` after an electro-thermal solve. **Open results…** in DC mode
     takes both, and `.kipi-results` files from earlier versions.
+- The via current limit starts at 1 A rather than none, a placeholder that marks vias PASS or
+  FAIL from the first solve (#114). Set your fab's rating, or 0 for none. A setup saved
+  with no limit keeps none.
+- **3D Models** shows every part on the board, not only the setup's parts on the nets shown:
+  the PI Models markers now say which parts are in the setup (#96).
 
 ### Internal
 - Board sources are kept apart from the rest of KiPI. `kipi/sources/` holds where boards

@@ -40,6 +40,13 @@ _PI_COLORS = {"vrm": ((0.25, 1.0, 0.35), (0.10, 0.45, 0.16)),
               "cap": ((0.95, 0.95, 0.95), (0.32, 0.33, 0.37))}
 _PI_POINT_PX = {"power": 14, "ground": 9}       # rail pins, ground pins
 _PI_LABEL_LIFT_MM = 1.0
+# The part selected in the setup (#96): larger dots and its name, in amber.
+_PI_SELECTED_COLORS = ((1.0, 0.8, 0.1), (0.75, 0.42, 0.0))
+_PI_SELECTED_PX = 22
+# A click this near a marker's name (half its height; the width follows the name) or one
+# of its dots, in pixels, picks the marker.
+_PI_LABEL_HALF_H_PX = 9
+_PI_DOT_PICK_PX = 8
 
 
 def _bar_format(lo: float, hi: float, log_scale: bool) -> str:
@@ -276,6 +283,7 @@ class Viewer3D(QWidget):
         self._show_pi = False               # PI Models markers, copper view only
         self._pi_markers: list = []
         self._pi_actors: Dict[str, object] = {}      # name -> actor
+        self._pi_selected: Optional[Tuple[str, str]] = None   # (kind, item) in the setup
         self._models: Dict[str, Tuple[pv.PolyData, str]] = {}   # ref -> (mesh, side)
         self._model_actors: Dict[str, vtkActor] = {}             # side -> actor
         self._board_top = 0.0
@@ -459,12 +467,82 @@ class Viewer3D(QWidget):
                 anchors[:, 2] += _PI_LABEL_LIFT_MM        # clear of the part's dots
                 self._pi_actors[name] = _pi_labels_actor(anchors, [m.name for m in parts],
                                                          colors[1])
+        sel = self._selected_marker()
+        if sel is not None:             # drawn last, so over the part's own dots and name
+            self._pi_actors["pi_selected_dots"] = _pi_dots_actor(
+                view(np.vstack([sel.power, sel.ground])), _PI_SELECTED_COLORS[0],
+                _PI_SELECTED_PX)
+            anchor = view(sel.anchor[None, :])
+            anchor[:, 2] += _PI_LABEL_LIFT_MM
+            self._pi_actors["pi_selected_label"] = _pi_labels_actor(
+                anchor, [sel.name], _PI_SELECTED_COLORS[1])
         for actor in self._pi_actors.values():
             renderer.AddViewProp(actor)
 
     @property
     def pi_marker_names(self) -> List[str]:
         return [m.name for m in self._pi_markers]
+
+    @property
+    def pi_markers(self) -> list:
+        return list(self._pi_markers)
+
+    def _selected_marker(self):
+        return next((m for m in self._pi_markers if (m.kind, m.item) == self._pi_selected),
+                    None)
+
+    def set_pi_selected(self, key: Optional[Tuple[str, str]]):
+        """Highlight the part selected in the setup, ``(kind, item name)``, or none (#96).
+        Shown with the PI Models markers."""
+        if key == self._pi_selected:
+            return
+        self._pi_selected = key
+        self._draw_pi_markers()
+        self._apply_visibility()
+
+    def pi_marker_at(self, screen_xy):
+        """The PI Models marker whose name, or else one of whose dots, is at ``screen_xy``
+        (display pixels), or None. Only while the markers are shown (#96)."""
+        if not self._show_pi or self._result is not None or not self._pi_markers:
+            return None
+        p = np.asarray(screen_xy, dtype=float)
+        lift = _PI_LABEL_LIFT_MM / self._zscale
+        anchors = np.array([[*m.anchor[:2], m.anchor[2] + lift] for m in self._pi_markers])
+        xy, behind = self._to_screen(anchors)
+        hits = [(abs(p[1] - a[1]), m) for m, a, hidden in zip(self._pi_markers, xy, behind)
+                if not hidden and abs(p[1] - a[1]) <= _PI_LABEL_HALF_H_PX
+                and abs(p[0] - a[0]) <= 6 + 4 * len(m.name)]
+        if hits:
+            return min(hits, key=lambda h: h[0])[1]
+        best, best_d = None, float(_PI_DOT_PICK_PX)
+        for m in self._pi_markers:
+            xy, behind = self._to_screen(np.vstack([m.power, m.ground]))
+            d = np.linalg.norm(xy - p, axis=1)[~behind]
+            if len(d) and d.min() <= best_d:
+                best, best_d = m, float(d.min())
+        return best
+
+    def focus_on(self, pts: np.ndarray, min_span_mm: float = 6.0):
+        """Center the view on ``pts`` (N, 3), KiCad coords, near enough to see them with
+        some board around them, looking from the same direction (#96)."""
+        pts = np.asarray(pts, dtype=float).reshape(-1, 3)
+        if not len(pts):
+            return
+        c = pts.mean(axis=0)
+        center = np.array([c[0], -c[1], c[2] * self._zscale])
+        span = 2.5 * max(float(np.ptp(pts[:, :2], axis=0).max()), min_span_mm)
+        cam = self.plotter.renderer.GetActiveCamera()
+        pos, focal = np.array(cam.GetPosition()), np.array(cam.GetFocalPoint())
+        dist = float(np.linalg.norm(pos - focal)) or 1.0
+        direction = (pos - focal) / dist
+        if cam.GetParallelProjection():
+            cam.SetParallelScale(span / 2)
+        else:
+            dist = span / 2 / np.tan(np.radians(cam.GetViewAngle()) / 2)
+        cam.SetFocalPoint(*center)
+        cam.SetPosition(*(center + direction * dist))
+        self.plotter.renderer.ResetCameraClippingRange()
+        self.plotter.render()
 
     def _flush(self):
         """Rebuild changed chunks and sync their actors."""
@@ -856,6 +934,9 @@ class Viewer3D(QWidget):
         if abs(x - start[0]) + abs(y - start[1]) > 4:     # a drag (rotate/pan), not a click
             return
         point = None
+        if self.pi_marker_at((x, y)) is not None:       # a part's name, over the copper
+            self._pick_cb(None, (x, y))
+            return
         if self._picker.Pick(x, y, 0, self.plotter.renderer) and self._picker.GetCellId() >= 0:
             wx, wy, wz = self._picker.GetPickPosition()
             point = (wx, -wy, wz / self._zscale)
@@ -868,15 +949,14 @@ class Viewer3D(QWidget):
                                 pickable=False, reset_camera=False, render=False)
         self.plotter.render()
 
-    def screen_distance_to_segments(self, segments: np.ndarray, screen_xy) -> np.ndarray:
-        """Pixel distance from ``screen_xy`` to each 3D segment (N, 2, 3), KiCad coords."""
-        if len(segments) == 0:
-            return np.zeros(0)
+    def _to_screen(self, pts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Display pixels (N, 2) of points (N, 3) in KiCad coords, and which of them are
+        behind the camera."""
         ren = self.plotter.renderer
         m = ren.GetActiveCamera().GetCompositeProjectionTransformMatrix(
             ren.GetTiledAspectRatio(), -1, 1)
         M = np.array([[m.GetElement(i, j) for j in range(4)] for i in range(4)])
-        P = segments.reshape(-1, 3).astype(float).copy()
+        P = np.asarray(pts, dtype=float).reshape(-1, 3).copy()
         P[:, 1] *= -1.0                       # KiCad y down -> view y up
         P[:, 2] *= self._zscale
         H = np.column_stack([P, np.ones(len(P))]) @ M.T
@@ -884,8 +964,15 @@ class Viewer3D(QWidget):
         ndc = H[:, :2] / np.where(behind, 1.0, H[:, 3])[:, None]
         w, h = ren.GetSize()
         ox, oy = ren.GetOrigin()
-        xy = np.column_stack([(ndc[:, 0] + 1) / 2 * w + ox,
-                              (ndc[:, 1] + 1) / 2 * h + oy]).reshape(-1, 2, 2)
+        return np.column_stack([(ndc[:, 0] + 1) / 2 * w + ox,
+                                (ndc[:, 1] + 1) / 2 * h + oy]), behind
+
+    def screen_distance_to_segments(self, segments: np.ndarray, screen_xy) -> np.ndarray:
+        """Pixel distance from ``screen_xy`` to each 3D segment (N, 2, 3), KiCad coords."""
+        if len(segments) == 0:
+            return np.zeros(0)
+        xy, behind = self._to_screen(segments.reshape(-1, 3))
+        xy = xy.reshape(-1, 2, 2)
         a, b = xy[:, 0], xy[:, 1]
         ab = b - a
         p = np.asarray(screen_xy, dtype=float)

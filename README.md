@@ -245,10 +245,10 @@ Below that:
   its color from the PCB editor's color theme (KiCad's default theme if it cannot be read).
 * **PI Models** Marks the setup's VRMs, loads, series links and capacitors with a
   model: a dot on each of their pads on the nets shown, with the part's name. It starts unticked; over results the
-  marks are hidden.
-* **3D Models** are the KiCad 3D models of the parts with PI models included in your setup (VRM components, loads, series links
-  and capacitor models) with a pad on a net included for analysis. When viewing results they start hidden; tick **3D Models** to show them on results. The
-  geometry and result views each remember their own setting.
+  marks are hidden. Clicking a VRM, load or series link in the setup lists marks it in amber and brings the view to
+  it; clicking a part's name (or dot) in 3D selects it in the setup.
+* **3D Models** shows the KiCad 3D models of every part on the board. When viewing results they start hidden; tick
+  **3D Models** to show them on results. The geometry and result views each remember their own setting.
 * **Info** shows whatever you last clicked in 3D. **Select in KiCad** selects that pad or
   via in the PCB editor. Thi can be used to pinpoint hot spots, find outliers in voltage drop, and find vias with heavy current.
 

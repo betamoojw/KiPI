@@ -81,6 +81,11 @@ def no_3d(monkeypatch):
         def render(self, *a, **k):            # QWidget has its own render()
             pass
 
+        pi_markers = ()
+
+        def set_pi_markers(self, markers):
+            self.pi_markers = list(markers)
+
         def __getattr__(self, name):          # every other view call is a no-op
             return lambda *a, **k: None
 

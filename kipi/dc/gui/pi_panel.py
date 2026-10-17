@@ -849,6 +849,8 @@ class LinkEditor(_Editor):
 class ItemList(QWidget):
     """A list of setup items plus the editor for the selected one."""
     changed = Signal()
+    #: The item now selected (or None), and whether the user picked it in the list.
+    selected = Signal(object, bool)
 
     def __init__(self, items: Callable[[], list], editor: _Editor, make_new: Callable[[], object],
                  describe: Callable[[object], str], parent=None, noun: str = "item"):
@@ -858,6 +860,7 @@ class ItemList(QWidget):
         lay.setContentsMargins(2, 2, 2, 2)
         self.lst = QListWidget(self)
         self.lst.currentRowChanged.connect(self._select)
+        self.lst.itemClicked.connect(lambda _: self.selected.emit(self.current(), True))
         self.lst.setToolTip(f"Select a {noun} to edit it below")
         row = QHBoxLayout()
         for text, slot, what in (("Add", self._add, f"Add a new {noun}"),
@@ -897,6 +900,19 @@ class ItemList(QWidget):
         self.lst.setCurrentRow(min(max(row, 0), n - 1) if n else -1)
         self._select(self.lst.currentRow())
 
+    def current(self):
+        """The selected item, or None."""
+        row, items = self.lst.currentRow(), self.items()
+        return items[row] if 0 <= row < len(items) else None
+
+    def select_name(self, name: str) -> bool:
+        """Select the item called ``name``; False if there is none."""
+        names = [getattr(x, "name", None) for x in self.items()]
+        if name not in names:
+            return False
+        self.lst.setCurrentRow(names.index(name))
+        return True
+
     def _select(self, row):
         items = self.items()
         if 0 <= row < len(items):
@@ -905,12 +921,15 @@ class ItemList(QWidget):
         else:
             self.editor.setEnabled(False)
             self.editor.obj = None
+        # Arrow keys in the list count as the user's pick; a reload does not.
+        self.selected.emit(self.current(), self.lst.hasFocus())
 
     def _edited(self):
         row = self.lst.currentRow()
         if 0 <= row < len(self.items()):
             self.lst.item(row).setText(self.describe(self.items()[row]))
         self.changed.emit()
+        self.selected.emit(self.current(), False)     # its name may have changed
 
     def _add(self):
         obj = self.make_new()
@@ -1000,6 +1019,9 @@ class PIPanel(QWidget):
     save_requested = Signal()
     arrows_toggled = Signal(bool)
     via_selected = Signal(str, str)        # group name, via / PTH pad id
+    # The VRM, load or series link selected in the setup: kind ("vrm", "load", "link"),
+    # name, and whether the user picked it; ("", "", False) for none (#96).
+    part_selected = Signal(str, str, bool)
     export_requested = Signal(str)         # "csv", "vtk" or "results"
     setup_changed = Signal()               # any edit to the setup
 
@@ -1047,6 +1069,9 @@ class PIPanel(QWidget):
             self.tabs.setTabToolTip(i, text)
         for il in (self.vrm_list, self.load_list, self.link_list):
             il.changed.connect(self._on_changed)
+            il.selected.connect(lambda _obj, user, il=il: self._part_selection(user)
+                                if self.tabs.currentWidget() is il else None)
+        self.tabs.currentChanged.connect(lambda _: self._part_selection(False))
         lay.addWidget(self.tabs, 3)
 
         self.lbl_errors = QLabel(self)
@@ -1660,6 +1685,27 @@ class PIPanel(QWidget):
     def _refresh_pickers(self):
         for il in (self.vrm_list, self.load_list, self.link_list):
             il.editor.refresh_nets(self._nets)
+
+    def _part_lists(self):
+        return {"vrm": self.vrm_list, "load": self.load_list, "link": self.link_list}
+
+    def _part_selection(self, by_user: bool):
+        """Say which part the shown list has selected; none on the other tabs."""
+        kind = next((k for k, il in self._part_lists().items()
+                     if il is self.tabs.currentWidget()), "")
+        obj = self._part_lists()[kind].current() if kind else None
+        self.part_selected.emit(kind if obj is not None else "",
+                                obj.name if obj is not None else "", by_user)
+
+    def select_part(self, kind: str, name: str) -> bool:
+        """Show the VRM, load or series link ``name`` in its list and editor (#96)."""
+        il = self._part_lists().get(kind)
+        if il is None or name not in [x.name for x in il.items()]:
+            return False
+        self.tabs.setCurrentWidget(il)
+        il.select_name(name)
+        self._part_selection(False)
+        return True
 
     def _on_changed(self):
         self._fill_groups()

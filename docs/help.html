@@ -551,10 +551,12 @@ Hiding layers does not change the result colors; set the
     <b>series link</b> (magenta) or <b>capacitor</b> with a model (white), larger on the
     rail's pins and smaller on ground, with the part's name above. Only pads on a net shown are marked, and the marks follow setup
     edits. They are drawn over the plain copper only, not over results, and not in AC
-    mode. Unticked to start with.</td></tr>
-  <tr><td id="models"><b>3D Models</b></td><td class="wrap">Shows the KiCad 3D models of the parts
-    in the setup (VRMs, loads, series links and the parts of capacitor models) that have a pad
-    on a net shown. In the geometry view they are on to start with; over results they start
+    mode. Unticked to start with.<br>
+    Clicking a VRM, load or series link in the setup's lists marks it in <b>amber</b>,
+    ticks PI Models and brings the view to it. Clicking a part's name (or one of its dots)
+    in 3D selects it in the setup, ready to edit.</td></tr>
+  <tr><td id="models"><b>3D Models</b></td><td class="wrap">Shows the KiCad 3D models of every
+    part on the board. In the geometry view they are on to start with; over results they start
     hidden, and ticking <b>3D Models</b> there shows them too. Each view remembers its own
     setting. See <a href="#part-models">Part 3D models</a> below.</td></tr>
 </table>
@@ -562,8 +564,8 @@ Hiding layers does not change the result colors; set the
 <ul>
   <li>KiPI asks KiCad's command-line tool, <code>kicad-cli</code>, to export just the parts it
     needs, so KiCad finds the model files the same way its own 3D viewer does (STEP and
-    VRML). It runs in the background and takes about a second; each part is read once per
-    board, so adding a part to the setup only exports that part.</li>
+    VRML). It runs in the background, the first time the models are shown; each part is
+    read once per board.</li>
   <li><code>kicad-cli</code> reads the <b>saved</b> <code>.kicad_pcb</code> file. A part moved
     since the last save is drawn where it was saved; save the board and click <b>Load from
     KiCad</b> to update it.</li>
@@ -1623,7 +1625,6 @@ standalone KiPI) from the temporary folder.</p></div>
 <div class="body"><ul>
   <li>Check <b>3D Models</b> is ticked in <a href="#display">Display</a>. Over results it starts
     unticked.</li>
-  <li>Only parts named in the setup with a pad on a ticked net get a model.</li>
   <li>The log says why. KiPI needs KiCad's <code>kicad-cli</code>: it looks in the connected
     KiCad, the PATH, the usual install folders and a Flatpak KiCad. Otherwise set the
     environment variable <code>KIPI_KICAD_CLI</code> to its full path.</li>

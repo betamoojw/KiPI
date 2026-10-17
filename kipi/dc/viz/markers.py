@@ -24,6 +24,7 @@ class PartMarker:
     name: str                                   # e.g. "VRM 3V3", or "C12" for a capacitor
     power: np.ndarray                           # rail pins (N, 3): drawn larger
     ground: np.ndarray                          # ground pins and ground sense (M, 3)
+    item: str = ""                              # the setup item's name (#96), e.g. "3V3"
 
     @property
     def anchor(self) -> np.ndarray:
@@ -88,22 +89,22 @@ def pi_markers(snap: Optional[BoardSnapshot], setup, nets: Iterable[str]) -> Lis
     parts = []
     for v in setup.vrms:
         phases = v.all_phases()
-        parts.append(("vrm", f"VRM {v.name}",
+        parts.append(("vrm", v.name, f"VRM {v.name}",
                       [v.sense, *(r for ph in phases for r in (ph.output, ph.input))],
                       [v.ground_sense, *(ph.ground for ph in phases)]))
     for ld in setup.loads:
-        parts.append(("load", f"Load {ld.name}", [ld.supply], [ld.ground]))
+        parts.append(("load", ld.name, f"Load {ld.name}", [ld.supply], [ld.ground]))
     for k in setup.links:
-        parts.append(("link", f"Link {k.name}", [k.side_a, k.side_b], []))
+        parts.append(("link", k.name, f"Link {k.name}", [k.side_a, k.side_b], []))
     out = []
-    for kind, name, power, ground in parts:
+    for kind, item, name, power, ground in parts:
         m = PartMarker(kind, name, _points(snap, power, nets, sides),
-                       _points(snap, ground, nets, sides))
+                       _points(snap, ground, nets, sides), item)
         if len(m.power) or len(m.ground):
             out.append(m)
     grounds = _ground_nets(setup)
     for ref in sorted({r for c in setup.caps for r in c.refs if r}):
-        m = PartMarker("cap", ref, *_cap_points(snap, ref, nets, grounds, sides))
+        m = PartMarker("cap", ref, *_cap_points(snap, ref, nets, grounds, sides), ref)
         if len(m.power) or len(m.ground):
             out.append(m)
     return out

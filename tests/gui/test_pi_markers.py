@@ -78,10 +78,12 @@ def _view():
     v = NS(plotter=pv.Plotter(off_screen=True), _models={}, _model_actors={}, _board_top=0.0,
            _model_board=0.0, _zscale=1.0, _show_models=True, _show_models_result=False,
            _show_board=True, _show_vias=True, _show_pi=True, _pi_markers=[], _pi_actors={},
+           _pi_selected=None,
            _result=None, _result_field="voltage", _chunk_actors={}, _result_actors={},
            _arrow_actors={}, _result_via_actor=None, _board_actors=[], _hidden_layers=set())
     for name in ("set_pi_markers", "_draw_pi_markers", "_remove_pi_actors", "_apply_visibility", "set_zscale",
-                 "set_feature_visible", "_place_models"):
+                 "set_feature_visible", "_place_models", "_selected_marker", "set_pi_selected",
+                 "pi_marker_at", "_to_screen", "focus_on"):
         setattr(v, name, MethodType(getattr(Viewer3D, name), v))
     return v
 
@@ -121,6 +123,58 @@ def test_markers_follow_the_z_scale():
     assert z() == pytest.approx(4 * z1)
 
 
+def test_the_part_selected_in_the_setup_is_marked():
+    """#96: larger amber dots on its pads and its name, over its own marker."""
+    v = _view()
+    v.set_pi_markers(pi_markers(board(), two_phase(ground=True), {"VOUT", "GND"}))
+    v.set_pi_selected(("vrm", "U1"))
+    dots = v._pi_actors["pi_selected_dots"]
+    vrm = next(m for m in v._pi_markers if m.item == "U1")
+    assert dots.GetMapper().GetInput().GetNumberOfPoints() == len(vrm.power) + len(vrm.ground)
+    assert "pi_selected_label" in v._pi_actors
+    names = list(v._pi_actors)
+    assert names[-2:] == ["pi_selected_dots", "pi_selected_label"]      # drawn last
+    v.set_feature_visible("pi", False)                    # shown with the markers
+    assert not dots.GetVisibility()
+    v.set_pi_selected(("load", "nothing such"))
+    assert "pi_selected_dots" not in v._pi_actors
+    v.set_pi_selected(None)
+    assert "pi_selected_label" not in v._pi_actors
+
+
+def _looking_down(v):
+    v.plotter.view_xy()
+    v.plotter.reset_camera(bounds=(0, 25, -10, 5, 0, 2))
+    v.plotter.render()
+
+
+def test_a_click_on_a_name_or_dot_finds_its_marker():
+    v = _view()
+    v.set_pi_markers(pi_markers(board(), two_phase(ground=True), {"VOUT", "GND"}))
+    _looking_down(v)
+    load = next(m for m in v._pi_markers if m.kind == "load")
+    anchor = [*load.anchor[:2], load.anchor[2] + 1.0]     # the name sits above the dots
+    (x, y), = v._to_screen(np.array([anchor]))[0]
+    assert v.pi_marker_at((x + 5, y + 3)) is load
+    (px, py) = v._to_screen(load.power)[0][0]
+    assert v.pi_marker_at((px + 2, py)) is not None
+    assert v.pi_marker_at((x + 2000, y)) is None
+    v.set_feature_visible("pi", False)                    # hidden markers are not clicked
+    assert v.pi_marker_at((x, y)) is None
+
+
+def test_focus_brings_the_view_to_the_part():
+    v = _view()
+    _looking_down(v)
+    cam = v.plotter.renderer.GetActiveCamera()
+    before = np.linalg.norm(np.array(cam.GetPosition()) - cam.GetFocalPoint())
+    v.focus_on(np.array([[10.0, 2.0, 1.6], [12.0, 2.0, 1.6]]))
+    np.testing.assert_allclose(cam.GetFocalPoint(), [11.0, -2.0, 1.6])
+    after = np.linalg.norm(np.array(cam.GetPosition()) - cam.GetFocalPoint())
+    assert after < before                                 # nearer: a part, not the board
+    np.testing.assert_allclose(cam.GetDirectionOfProjection(), [0, 0, -1], atol=1e-9)
+
+
 # --- The window ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
@@ -147,4 +201,48 @@ def test_the_window_marks_the_dc_setup_in_dc_mode(app, no_3d, monkeypatch):
     assert drawn[-1] == []
     w.set_mode("dc")
     assert drawn[-1] == ["VRM U1", "Load U2"]
+    w.close()
+
+
+def test_picking_a_part_in_the_setup_marks_it_and_goes_there(app, no_3d, monkeypatch):
+    from kipi.gui.main_window import MainWindow
+    w = MainWindow()
+    w.snapshot = board()
+    w.solve_panel.setup = two_phase()
+    w.solve_panel.vrm_list.reload()
+    w.solve_panel.load_list.reload()
+    monkeypatch.setattr(w, "_checked_set", lambda: frozenset({"VOUT"}))
+    w._sync_pi_markers()
+    marked, focused = [], []
+    monkeypatch.setattr(w.viewer, "set_pi_selected", marked.append)
+    monkeypatch.setattr(w.viewer, "focus_on", focused.append)
+    lst = w.solve_panel.load_list
+    w.solve_panel.tabs.setCurrentWidget(lst)
+    assert marked[-1] == ("load", "U2") and not focused       # shown, not flown to
+    assert not w.chk_pi.isChecked()
+    lst.lst.itemClicked.emit(lst.lst.item(0))                 # the user clicks it
+    assert w.chk_pi.isChecked() and len(focused) == 1
+    np.testing.assert_allclose(focused[0][:, :2].mean(axis=0), [5.5, 0.5])
+    w.solve_panel.tabs.setCurrentIndex(3)                     # the Solve tab: none
+    assert marked[-1] is None
+    w.close()
+
+
+def test_clicking_a_name_in_3d_selects_the_part(app, no_3d, monkeypatch):
+    from kipi.gui.main_window import MainWindow
+    w = MainWindow()
+    w.snapshot = board()
+    w.solve_panel.setup = two_phase()
+    for il in (w.solve_panel.vrm_list, w.solve_panel.load_list):
+        il.reload()
+    monkeypatch.setattr(w, "_checked_set", lambda: frozenset({"VOUT"}))
+    w._sync_pi_markers()
+    load = next(m for m in w.viewer.pi_markers if m.kind == "load")
+    monkeypatch.setattr(w.viewer, "pi_marker_at", lambda xy: load)
+    picked = []
+    monkeypatch.setattr(w, "_on_pick", lambda *a: picked.append(a))
+    w._on_click((5.5, 0.5, 1.6), (10, 10))
+    assert w.solve_panel.tabs.currentWidget() is w.solve_panel.load_list
+    assert w.solve_panel.load_list.current().name == "U2"
+    assert picked == []                                       # not a copper pick
     w.close()
