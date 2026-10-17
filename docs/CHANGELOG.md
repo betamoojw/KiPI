@@ -4,7 +4,57 @@ All notable changes to KiPI, newest first. Each minor version is one development
 The code's version number went from 0.1.0 straight to 0.5.0, so 0.2.0 to 0.4.0 name
 milestones rather than versions that were ever set.
 
-## 0.7.1 (in development)
+## 0.8.0 (in development): plugin and standalone modes
+
+First milestone of running KiPI on its own, outside KiCad (#45). The plugin works as before.
+
+### Added
+- **Standalone mode.** Started from KiCad's toolbar, KiPI runs as the plugin and reads the
+  board open in the PCB editor. Started any other way (`python -m kipi`, or the `kipi`
+  command of an installed package), it runs standalone: it opens board files and needs no
+  KiCad.
+  - `python -m kipi [board]` opens that board; a file KiPI cannot read stops it with a
+    message.
+  - The toolbar has **Open…** and **Reload** in place of *Load from KiCad*, *Refill zones*
+    and *Open snapshot…*. *Select in KiCad* and the part *Models* box are hidden, and the
+    copper uses KiPI's default layer colors.
+  - For now standalone opens KiPI snapshots (`.kipi.json.gz`). Reading `.kicad_pcb`, HYP and
+    ODB++ files, and a launcher that installs the dependencies on first run, come next.
+  - The title bar says *(standalone)*, and the welcome screen and About show the mode.
+  - The plugin and standalone KiPI each allow one window of their own, so an open
+    standalone KiPI never takes over KiCad's KiPI button.
+  - `KIPI_HOST=plugin` (or `standalone`) overrides how KiPI tells the two apart, e.g. to run
+    the plugin workflow from a terminal.
+- **Where the board came from, and its placeholders.** The board summary in the Info box
+  names the source ("From KiCad PCB editor 10.0.7") and the snapshot file it was opened from,
+  and lists under *Placeholders* each value KiPI had to fill in because the source did not
+  give it: a default stackup, a 2-layer guess from a KiCad too old to list its layers, or
+  pads kept on every layer when KiCad cannot say which layers plated pads are on. Snapshots
+  keep both; older snapshots read as coming from KiCad.
+
+### Changed
+- `python -m kipi` with no arguments starts standalone instead of connecting to the running
+  KiCad. Use `KIPI_HOST=plugin python -m kipi` for the old behavior; `--dump` still
+  extracts from the running KiCad.
+- `kicad-python` is now the `kicad` extra of the Python package
+  (`pip install -e "<KiPI folder>[kicad]"`), since standalone KiPI does not need it. `requirements.txt`, which KiCad installs for the
+  plugin, still includes it.
+
+### Internal
+- Board sources are kept apart from the rest of KiPI. `kipi/sources/` holds where boards
+  come from: `kicad_ipc/` (the running KiCad, moved from `kipi/core/kicad_io/`), the
+  snapshot file, and a registry of the file formats Open reads. The window sees only a
+  `BoardSource` (read, re-read, refill, select) and an `InstalledTool` (layer colors and
+  part models). `tests/test_layering.py` fails if kipy is imported outside the KiCad
+  source, or if core, DC, AC or the GUI import a source directly.
+- What any board reader shares moved into `kipi/core`: KiPI's copper layer ids
+  (`core/model/layers.py`, equal to KiCad's), stackup building and the default stackup
+  (`core/model/stackup.py`), snapshot I/O (`core/model/snapshot_io.py`), arc discretization
+  (`core/geometry/arcs.py`) and the default layer colors (`core/viz/layer_colors.py`).
+  Results saved by earlier versions still open.
+- `kipi/host.py` says how KiPI was started; the entry points set it.
+
+## 0.7.1
 
 ### Added
 - **Save and open AC results** (#56). *Save results…* in the AC panel writes every rail
@@ -21,7 +71,7 @@ milestones rather than versions that were ever set.
 - Each release gets a `KiPI-<version>.zip` to unzip into KiCad's plugins folder, which is
   also what makes its downloads countable.
 
-## 0.7.0 (in development): AC impedance analysis, faster solves
+## 0.7.0: AC impedance analysis, faster solves
 
 ### Added
 - **AC analysis: PDN impedance over frequency.** The right end of the toolbar has

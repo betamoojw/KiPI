@@ -203,8 +203,9 @@ guide.</div>
 <h2 id="overview">What KiPI does</h2>
 <p>KiPI is a power integrity (PI) analyzer that runs as a KiCad 9/10 plugin. It reads the
 copper of your board straight from the PCB editor and simulates how power gets from your
-regulators to the parts that use it. It has two analysis modes, chosen at the right end of
-the toolbar:</p>
+regulators to the parts that use it. It also runs <a href="#window">standalone</a>, without
+KiCad, on board files. It has two analysis modes, chosen at the right end of the
+toolbar:</p>
 <table>
   <tr><th>Mode</th><th>Question it answers</th><th>What you get</th></tr>
   <tr><td><b>DC</b></td><td class="wrap">With every load drawing its current, what voltage
@@ -280,8 +281,9 @@ time you solve, so the next session starts where you left off.</p>
 <div class="body">
 <p>The repository includes an example: a 4-phase 12 V → 0.9 V, 40 A core rail with decoupling
 and probes already set up. From a development checkout run</p>
-<p><code>python -m kipi --snapshot examples/multiphase_buck/multiphase_buck.kipi.json.gz</code></p>
-<p>or click <b>Open snapshot…</b> in KiPI and choose that file.</p>
+<p><code>python -m kipi examples/multiphase_buck/multiphase_buck.kipi.json.gz</code></p>
+<p>which opens it in standalone KiPI, or open that file with <b>Open…</b> (standalone) or
+<b>Open snapshot…</b> (the plugin).</p>
 </div>
 </details>
 
@@ -293,12 +295,22 @@ and probes already set up. From a development checkout run</p>
 float them in their own windows.</p>
 <h4>Starting KiPI</h4>
 <ul>
-  <li>While KiPI starts it shows a <b>welcome screen</b> with the logo, its version and the
-    versions of Python and its main packages. It closes on its own after one play of the
-    animation, or when you click it.</li>
-  <li><b>One KiPI at a time.</b> Clicking the KiPI button while KiPI is already open brings
-    the open window to the front instead of opening a second one. A KiPI that crashed does
-    not block the next one.</li>
+  <li><b>Plugin or standalone.</b> Started from the KiPI button in KiCad's PCB editor, KiPI
+    runs as the <b>plugin</b>: it reads the board open in the editor and can re-read it,
+    refill its zones and select items in it. Started any other way (<code>python -m
+    kipi</code>, or the <code>kipi</code> command), it runs <b>standalone</b>: it opens
+    board files with <b>Open…</b> and needs no KiCad. The title bar then ends in
+    <i>(standalone)</i>, and the controls that need KiCad are hidden (see the
+    <a href="#toolbar">toolbar</a>). For now standalone opens KiPI snapshots
+    (<code>.kipi.json.gz</code>).</li>
+  <li>While KiPI starts it shows a <b>welcome screen</b> with the logo, its version, whether
+    it runs as the plugin or standalone, and the versions of Python and its main packages.
+    It closes on its own after one play of the animation, or when you click it.</li>
+  <li><b>One KiPI at a time</b> (one plugin and one standalone). Clicking the KiPI button
+    while the plugin is already open brings the open window to the front instead of opening
+    a second one; starting standalone KiPI again does the same for the standalone window.
+    The two never take each other's place. A KiPI that crashed does not block the next
+    one.</li>
   <li><b>One KiCad at a time.</b> KiPI talks to KiCad through its API, which cannot tell two
     open KiCads apart, so KiPI will not connect (at start or on <b>Load from KiCad</b>) while
     more than one KiCad project manager or PCB editor is open. The message names each one
@@ -312,15 +324,22 @@ float them in their own windows.</p>
 <div class="body">
 <table>
   <tr><th>Button</th><th>What it does</th></tr>
-  <tr><td><b>Load from KiCad</b></td><td class="wrap">Re-reads the board from the running PCB
-    editor (after you change the layout) and reloads the saved setup. The nets you have
-    ticked stay ticked. Save the setup first if you have unsaved changes. Only one KiCad may
-    be open (see <a href="#window">Starting KiPI</a>).</td></tr>
-  <tr><td><b>Refill zones</b></td><td class="wrap">When ticked, KiPI asks KiCad to refill every
-    zone and waits for it before reading. KiPI only sees <em>filled</em> copper, so leave
-    this on unless the fills are already current and the refill is slow.</td></tr>
-  <tr><td><b>Open snapshot…</b></td><td class="wrap">Opens a board saved with <b>Save
-    snapshot…</b>. KiCad does not need to be running.</td></tr>
+  <tr><td><b>Load from KiCad</b><br><small>plugin</small></td><td class="wrap">Re-reads the
+    board from the running PCB editor (after you change the layout) and reloads the saved
+    setup. The nets you have ticked stay ticked. Save the setup first if you have unsaved
+    changes. Only one KiCad may be open (see <a href="#window">Starting KiPI</a>).</td></tr>
+  <tr><td><b>Refill zones</b><br><small>plugin</small></td><td class="wrap">When ticked, KiPI
+    asks KiCad to refill every zone and waits for it before reading. KiPI only sees
+    <em>filled</em> copper, so leave this on unless the fills are already current and the
+    refill is slow.</td></tr>
+  <tr><td><b>Open snapshot…</b><br><small>plugin</small></td><td class="wrap">Opens a board
+    saved with <b>Save snapshot…</b>. KiCad does not need to be running.</td></tr>
+  <tr><td><b>Open…</b><br><small>standalone</small></td><td class="wrap">Opens a board file:
+    for now a KiPI snapshot (<code>.kipi.json.gz</code>). Its saved setup comes with it, as
+    with <b>Load from KiCad</b>.</td></tr>
+  <tr><td><b>Reload</b><br><small>standalone</small></td><td class="wrap">Reads the open board
+    file again, for example after saving a new snapshot over it. Ticked nets stay
+    ticked.</td></tr>
   <tr><td><b>Save snapshot…</b></td><td class="wrap">Saves the extracted board as
     <code>.kipi.json.gz</code>, to analyze later, on another machine, or to attach to a bug
     report.</td></tr>
@@ -437,8 +456,14 @@ are shown, so one layer's outlier does not wash out the others.</p>
 the layer and coordinates, the pad or via hit (net, drill, layer span), and, when results are
 shown, the voltage, drop, current density, power density and via current at that point. In AC
 mode it shows the impedance plot's cursor values.</p>
+<p>The summary says where the board came from (for example <i>From KiCad PCB editor
+10.0.7</i>, and the snapshot file it was opened from). Under <b>Placeholders</b> it lists
+anything KiPI had to fill in because the source did not give it, such as a default stackup
+when the board's own is incomplete. Results that depend on a placeholder are only as good as
+the placeholder.</p>
 <p><b>Select in KiCad</b> selects the picked pad or via in the PCB editor, so you can find it
-in your layout. It needs a live KiCad connection (not a snapshot).</p>
+in your layout. It needs a live KiCad connection (not a snapshot), so the plugin has it and
+standalone KiPI does not.</p>
 </div>
 </details>
 
@@ -1268,7 +1293,8 @@ them a model or confirm they really do not belong on this rail.</p>
 <div class="body">
 <ul>
   <li><b>Save snapshot…</b> stores the board; anyone with KiPI can open it with <b>Open
-    snapshot…</b> without KiCad or your design files.</li>
+    snapshot…</b>, or with <b>Open…</b> in standalone KiPI, without KiCad or your design
+    files.</li>
   <li>Keep <code>&lt;board&gt;.kipi-setup.json</code> in version control next to the board.</li>
   <li>Tick <b>HTML report</b> for a single file you can email: it needs nothing but a
     browser.</li>
@@ -1297,9 +1323,10 @@ them a model or confirm they really do not belong on this rail.</p>
   <tr><td><code>&lt;board&gt;_&lt;rail&gt;_ac_report.html</code></td><td class="wrap">An AC rail's HTML report.</td></tr>
   <tr><td><code>*.csv</code></td><td class="wrap">DC tables, or an AC rail's impedance.</td></tr>
   <tr><td><code>*.vtm</code></td><td class="wrap">DC 3D results for ParaView.</td></tr>
-  <tr><td><code>kipi-&lt;user&gt;.lock</code></td><td class="wrap">In the temporary folder while
-    KiPI is open, so a second KiPI brings the first to the front. It names the owner's
-    process, so one left behind by a crash is ignored.</td></tr>
+  <tr><td><code>kipi-&lt;user&gt;.lock</code>,<br><code>kipi-standalone-&lt;user&gt;.lock</code></td>
+    <td class="wrap">In the temporary folder while the plugin, or standalone KiPI, is open,
+    so a second one brings the first to the front. It names the owner's process, so one
+    left behind by a crash is ignored.</td></tr>
   <tr><td><code>&lt;board&gt;.kicad_prl</code></td><td class="wrap">KiCad's own local project
     settings. <code>kicad-cli</code> may create it next to the board the first time it exports
     <a href="#part-models">part models</a>, if the project has none yet.</td></tr>
@@ -1332,7 +1359,8 @@ If the running programs cannot be listed, KiPI carries on.</p></div>
 <summary>Clicking the KiPI button does not open a new window</summary>
 <div class="body"><p>KiPI is already open, perhaps minimized or behind KiCad; the button brings it
 to the front. If it is not open and still does not start, check the session log for a stale lock
-and delete <code>kipi-&lt;user&gt;.lock</code> from the temporary folder.</p></div>
+and delete <code>kipi-&lt;user&gt;.lock</code> (<code>kipi-standalone-&lt;user&gt;.lock</code> for
+standalone KiPI) from the temporary folder.</p></div>
 </details>
 <details id="ts-models">
 <summary>No part models are drawn</summary>

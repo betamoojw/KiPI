@@ -29,11 +29,24 @@ control in KiPI has a tooltip.
 
 ![KiPI main window: nets and layers on the left, the board in 3D, the PI setup on the right](docs/images/overview.png)
 
-**Status: 0.7.0 (alpha)** ([changelog](docs/CHANGELOG.md)). This entire project was vibe coded with Claude Opus 5.5. I make no assurances that any of this works or is accurate; however, for my use cases (decently complex PCB layouts, windows 11 machine, KiCad 10.0.7), it seems stable. The solver is a 2.5D finite element model of the copper, checked against closed-form results (the resistance of a straight trace, current spreading radially into a via). Solving the field is the well-understood part. The modelling of vias, power supplies and the bridging of layers is where the approximations are. Please leave any comments, concerns or bugs as a github issue. I wanted a free, open source power integrity tool for KiCad, which I think this project accomplishes. I'm open to suggestions for improvements.
+**Status: 0.8.0 (alpha)** ([changelog](docs/CHANGELOG.md)). This entire project was vibe coded with Claude Opus 5.5. I make no assurances that any of this works or is accurate; however, for my use cases (decently complex PCB layouts, windows 11 machine, KiCad 10.0.7), it seems stable. The solver is a 2.5D finite element model of the copper, checked against closed-form results (the resistance of a straight trace, current spreading radially into a via). Solving the field is the well-understood part. The modelling of vias, power supplies and the bridging of layers is where the approximations are. Please leave any comments, concerns or bugs as a github issue. I wanted a free, open source power integrity tool for KiCad, which I think this project accomplishes. I'm open to suggestions for improvements.
 
 ## Install
 
-### Requirements
+KiPI runs two ways, from the same folder:
+
+* **As a KiCad plugin**, the main way: click the **KiPI** button in the PCB editor and KiPI
+  reads the board open there. For this, the KiPI folder **must be in KiCad's plugins
+  folder**, and KiCad installs its dependencies.
+* **Standalone**: KiPI started on its own opens board files and needs no KiCad. The
+  folder can be **anywhere**, and you install the dependencies yourself. For now it opens
+  KiPI snapshots (`.kipi.json.gz`, saved from the plugin with *Save snapshot…*). Reading
+  KiCad `.kicad_pcb`, HYP and ODB++ files directly, and a launcher that installs everything
+  on first run, are on the way ([#45](https://github.com/drewsum/KiPI/issues/45)).
+
+### As a KiCad plugin
+
+#### Requirements
 
 * **KiCad 9.0 or later.** Developed on KiCad 10.0.7 and confirmed on KiCad 9.0.7. The tests
   also check the API of every release from 9.0.0 to 10.0.6. On KiCad 9, KiPI works around
@@ -54,7 +67,7 @@ control in KiPI has a tooltip.
     example from python.org or Homebrew) and select it as the **Python interpreter** in
     *Preferences → Plugins*.
 
-### Steps
+#### Steps
 
 1. In KiCad, enable **Preferences → Plugins → Enable KiCad API**.
 2. Link (or copy) this repo into your KiCad plugins folder. The examples use KiCad 10's
@@ -83,6 +96,34 @@ control in KiPI has a tooltip.
    once the venv is ready. If it never appears, right-click the action in
    *Preferences → Plugins* and choose *Recreate Plugin Environment*.
 
+### Standalone
+
+You need Python 3.10 to 3.13 (see the plugin requirements above for why not 3.14). Put the
+KiPI folder anywhere, by cloning this repo or unzipping `KiPI-<version>.zip` from the
+[latest release](https://github.com/drewsum/KiPI/releases/latest), and install it into a
+virtual environment of its own. Install it *editable* (`-e`): KiPI then runs from that
+folder, where it finds its user guide and icons, so leave the folder in place.
+
+```powershell
+# Windows
+py -3.12 -m venv kipi-venv
+kipi-venv\Scripts\pip install -e <path to the KiPI folder>
+kipi-venv\Scripts\kipi                                  # or: kipi <board>.kipi.json.gz
+```
+
+```sh
+# macOS and Linux
+python3.12 -m venv kipi-venv
+kipi-venv/bin/pip install -e <path to the KiPI folder>
+kipi-venv/bin/kipi                                         # or: kipi <board>.kipi.json.gz
+```
+
+The window's title ends in *(standalone)*. Use **Open…** to open a board and **Reload** to
+read it again after it changes. KiCad-only controls (*Load from KiCad*, *Refill zones*,
+*Select in KiCad*, part 3D models) are hidden. Standalone does not need kicad-python;
+`pip install -e "<path>[kicad]"` adds it if you also want `kipi --dump` to extract a
+board from the running KiCad.
+
 ### Optional: faster solves on large boards (Windows and Linux, x86-64)
 
 KiPI solves each rail with SciPy's single-threaded sparse solver, or with AMG when a rail
@@ -100,7 +141,8 @@ macOS or ARM:
 | Plugin environment on disk (Windows) | about 860 MB | about 1.5 GB |
 
 Almost all of that is MKL itself (565 MB installed) and Intel's OpenMP runtime (61 MB).
-To add it, install it into KiPI's plugin environment and restart the PCB editor:
+To add it to the plugin, install it into KiPI's plugin environment and restart the PCB
+editor (standalone, install it into your own environment with its `pip`):
 
 ```powershell
 # Windows (KiCad 10; use 9.0 for KiCad 9)
@@ -450,20 +492,25 @@ details.
 
 ## Development
 
-KiPI also runs outside KiCad, against the running PCB editor or a saved snapshot:
+From a checkout, KiPI runs standalone, or as the plugin against the running PCB editor:
 
 ```powershell
 python -m venv --system-site-packages .venv   # use KiCad's bundled python.exe
 .venv\Scripts\pip install -r requirements.txt -r requirements-dev.txt
-.venv\Scripts\python -m kipi                         # connect to the running PCB editor
-.venv\Scripts\python -m kipi --dump board.kipi.json.gz   # extract only
-.venv\Scripts\python -m kipi --snapshot tests\data\synthetic.kipi.json
+.venv\Scripts\python -m kipi tests\data\synthetic.kipi.json   # standalone, opening a board
+$env:KIPI_HOST = "plugin"; .venv\Scripts\python -m kipi        # the plugin: connect to KiCad
+.venv\Scripts\python -m kipi --dump board.kipi.json.gz   # extract from KiCad only, no window
 .venv\Scripts\python -m pytest tests
 .venv\Scripts\ruff check .                    # lint, as CI does (ruff check . --fix fixes most)
 ```
 
-`requirements.txt` is what KiCad installs into the plugin's venv; test and lint tools live
-only in `requirements-dev.txt`.
+KiPI runs as the plugin when KiCad starts it (KiCad sets `KICAD_API_SOCKET`) and standalone
+otherwise; `KIPI_HOST=plugin` or `standalone` overrides that (`kipi/host.py`).
+
+`requirements.txt` is what KiCad installs into the plugin's venv: `pyproject.toml`'s
+dependencies, which are all standalone needs, plus its `kicad` extra (kicad-python).
+`tests/test_requirements.py` keeps them in step. Test and lint tools live only in
+`requirements-dev.txt`.
 
 CI runs ruff and the test suite for every push and pull request: on Windows with Python 3.11,
 on Linux with Python 3.10 to 3.13, on macOS, and with the oldest kicad-python that
@@ -491,7 +538,9 @@ The tests also solve the example board and check that its committed setup still 
 
 | Path | Purpose |
 |---|---|
-| `kipi_entry.py`, `plugin.json` | KiCad IPC plugin action |
+| `kipi_entry.py`, `plugin.json` | KiCad IPC plugin action (runs KiPI as the plugin) |
+| `kipi/__main__.py` | `python -m kipi` / `kipi`: standalone, or the plugin with `KIPI_HOST=plugin` |
+| `kipi/host.py` | Plugin or standalone: how KiPI was started |
 | `kipi/core/` | Shared by every analysis; no Qt and no analysis-specific physics: |
 | `kipi/core/model/` | Toolkit-independent board model, copper layer ids, stackup building, JSON snapshot save/load, power-net heuristics |
 | `kipi/core/geometry/` | Per-net, per-layer copper union (shapely), arc discretization |
@@ -500,7 +549,10 @@ The tests also solve the example board and check that its committed setup still 
 | `kipi/core/viz/` | PyVista copper meshes and batching, default layer colors (no Qt) |
 | `kipi/core/progress.py` | Progress/log reporting used by every pipeline stage |
 | `kipi/sources/` | Where boards come from, each producing a `BoardSnapshot`; nothing else in KiPI imports kipy: |
+| `kipi/sources/base.py` | What the window asks of a source (`BoardSource`: read, re-read, refill, select) and of a design tool on this computer (`InstalledTool`: layer colors, part models) |
+| `kipi/sources/registry.py` | The board files **Open…** reads, and which source reads each |
 | `kipi/sources/kicad_ipc/` | The running KiCad, through the IPC API (kipy): board extraction, zone refill, KiCad instance checks, color theme, 3D models through kicad-cli |
+| `kipi/sources/snapshot_file.py` | A saved snapshot as a source |
 | `kipi/dc/` | DC analysis: |
 | `kipi/dc/solver/` | 2.5D DC conduction FEM: sheet conductance, via/PTH barrels, series parts, sources, loads |
 | `kipi/dc/pi/` | User power-tree setup (VRMs, loads, series links), JSON, validation, the guesses that pre-fill it, tree solver, results tables |
