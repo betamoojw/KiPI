@@ -26,7 +26,7 @@ from kipi.ac.checks import capacitor_candidates, default_ground, validate_ac
 from kipi.ac.model import CapModel, Probe
 from kipi.core.model.board import BoardSnapshot
 from kipi.core.model.nets import classify_nets, sorted_nets
-from kipi.core.model.parts import parse_capacitance
+from kipi.core.model.parts import is_class2, parse_capacitance, parse_voltage_rating
 from kipi.dc.gui.pi_panel import (
     ItemList, LinkEditor, PIPanel, VrmEditor, _Editor, _spin, _unique, make_searchable,
     new_link, new_vrm, parts_on_net, tip,
@@ -67,16 +67,36 @@ class CapEditor(_Editor):
         f.addRow("Capacitance", self.cap)
         f.addRow("ESL", self.esl)
         f.addRow("ESR", self.esr)
+        self.chk_bias = QCheckBox("Estimate DC bias")
+        self.rated = _spin(0, 1e4, 0, 3, " V", 1)
+        self.rated.setSpecialValueText("not set")
+        self.kept = _spin(1, 100, 40, 1, " %", 5)
+        f.addRow(self.chk_bias)
+        f.addRow("Voltage rating", self.rated)
+        f.addRow("Kept at rating", self.kept)
         for w, text in (
                 (self.name, "A name for this model, e.g. the part number or value"),
-                (self.cap, "Capacitance of one part. Use the effective value at the rail's DC "
-                           "bias if the datasheet gives it (ceramics lose capacitance with "
-                           "voltage)."),
+                (self.cap, "Capacitance of one part, at no DC bias. Tick Estimate DC bias "
+                           "for a ceramic (X5R, X7R…), or enter the effective value at the "
+                           "rail's voltage if the datasheet gives it."),
+                (self.chk_bias, "Derate the capacitance by the DC voltage across each part, "
+                                "as class II ceramics (X5R, X7R…) lose capacitance with "
+                                "voltage. The voltage is the last DC solve's across the "
+                                "part, or else the rail's VRM set point. Leave unticked for "
+                                "C0G, polymer and electrolytic parts."),
+                (self.rated, "The part's DC voltage rating, which the DC bias estimate is "
+                             "scaled by"),
+                (self.kept, "How much of its capacitance the part keeps at its rated "
+                            "voltage, from the datasheet's DC bias curve (typically 30 to "
+                            "50 %; smaller cases lose more). The curve is shaped like a "
+                            "typical X5R/X7R part's."),
                 (self.esl, "Equivalent series inductance of the part itself (from its "
                            "datasheet); the board's mounting inductance is simulated"),
                 (self.esr, "Equivalent series resistance of one part, from its datasheet")):
             tip(f, w, text)
-        self._watch(self.name, self.cap, self.esl, self.esr)
+        self._watch(self.name, self.cap, self.esl, self.esr, self.rated, self.kept)
+        self.chk_bias.toggled.connect(self._store)
+        self.chk_bias.toggled.connect(self.kept.setEnabled)
 
         self.filter = QLineEdit()
         self.filter.setPlaceholderText("Filter parts (reference, value, footprint or net)…")
@@ -131,6 +151,10 @@ class CapEditor(_Editor):
         self.cap.setValue(m.capacitance_f * 1e6)
         self.esl.setValue(m.esl_h * 1e9)
         self.esr.setValue(m.esr_ohm * 1e3)
+        self.chk_bias.setChecked(m.dc_bias)
+        self.rated.setValue(m.rated_v or 0.0)
+        self.kept.setValue(m.kept_at_rated_pct)
+        self.kept.setEnabled(m.dc_bias)
         self.fill_table()
 
     def _save(self, m: CapModel):
@@ -138,6 +162,9 @@ class CapEditor(_Editor):
         m.capacitance_f = self.cap.value() * 1e-6
         m.esl_h = self.esl.value() * 1e-9
         m.esr_ohm = self.esr.value() * 1e-3
+        m.dc_bias = self.chk_bias.isChecked()
+        m.rated_v = self.rated.value() or None
+        m.kept_at_rated_pct = self.kept.value()
 
     # ------------------------------------------------------------ parts
     def fill_table(self):
@@ -504,7 +531,7 @@ class ACPanel(QWidget):
                 "RLC models for the decoupling capacitors, and which parts use each",
                 "Where the impedance is looked into (usually a device's power pins), "
                 "with its target",
-                "Frequency range and resolution of the sweep",
+                "Frequency range and resolution of the sweep, and capacitor DC bias",
                 "Mesh density and dielectric losses for the AC field solve")):
             self.tabs.setTabToolTip(i, text)
         for il in self._lists():
@@ -618,6 +645,14 @@ class ACPanel(QWidget):
                               "sweep frequency (slowest, exact).")
         for wdg in (self.spin_fstart, self.spin_fstop, self.spin_ppd, self.spin_fpd):
             wdg.valueChanged.connect(self._ac_settings_changed)
+        self.chk_bias = QCheckBox("Capacitor DC bias")
+        self.chk_bias.setChecked(s.dc_bias)
+        f.addRow(self.chk_bias)
+        tip(f, self.chk_bias, "Derate the capacitor models that have Estimate DC bias ticked, "
+                              "by the DC voltage across each part (from the last DC solve, "
+                              "or else the rail's VRM set point). Untick to solve with every "
+                              "model's capacitance as entered.")
+        self.chk_bias.toggled.connect(self._ac_settings_changed)
         return w
 
     def _mesh_tab(self) -> QWidget:
@@ -664,6 +699,7 @@ class ACPanel(QWidget):
         s.min_edge_mm = self.spin_min_edge.value()
         s.loss_tangent = self.spin_tand.value()
         s.default_er = self.spin_er.value()
+        s.dc_bias = self.chk_bias.isChecked()
         self._on_changed()
 
     def _load_ac_settings(self):
@@ -677,9 +713,10 @@ class ACPanel(QWidget):
             wdg.blockSignals(True)
             wdg.setValue(v)
             wdg.blockSignals(False)
-        self.chk_report.blockSignals(True)
-        self.chk_report.setChecked(s.html_report)
-        self.chk_report.blockSignals(False)
+        for chk, on in ((self.chk_report, s.html_report), (self.chk_bias, s.dc_bias)):
+            chk.blockSignals(True)
+            chk.setChecked(on)
+            chk.blockSignals(False)
 
     # ------------------------------------------------------------------ data
     def nets(self) -> List[str]:
@@ -851,7 +888,10 @@ class ACPanel(QWidget):
             name = _unique(value, taken)
             taken.append(name)
             farads = parse_capacitance(value) or 0.0
-            self.setup.caps.append(CapModel(name, farads, 0.0, 0.0, refs))
+            rated = parse_voltage_rating(value)
+            self.setup.caps.append(CapModel(name, farads, 0.0, 0.0, refs,
+                                            dc_bias=rated is not None and is_class2(value),
+                                            rated_v=rated))
         self.cap_list.reload()
         self._on_changed()
 
@@ -866,7 +906,9 @@ class ACPanel(QWidget):
     def _describe_cap(m: CapModel) -> str:
         vals = (f"{_fmt_farads(m.capacitance_f)}, {m.esl_h * 1e9:g} nH, {m.esr_ohm * 1e3:g} mΩ"
                 if m.capacitance_f and m.esl_h and m.esr_ohm else "values needed")
-        return f"{m.name}: {vals} ({len(m.refs)} part{'s' if len(m.refs) != 1 else ''})"
+        bias = f", DC bias {m.rated_v:g} V rated" if m.dc_bias and m.rated_v else ""
+        return (f"{m.name}: {vals}{bias} "
+                f"({len(m.refs)} part{'s' if len(m.refs) != 1 else ''})")
 
     @staticmethod
     def _describe_probe(p: Probe) -> str:
@@ -953,6 +995,8 @@ class ACPanel(QWidget):
                  f"{result.plane_capacitance_f * 1e9:.3g} nF",
                  f"{st.n_unknowns} unknowns, {len(result.field_freqs)} field solves "
                  f"({st.method}), {len(result.freqs)} sweep points in {result.solve_s:.1f} s"]
+        if getattr(result, "bias_note", ""):
+            notes.append(html.escape(result.bias_note))
         if result.missing_caps:
             notes.append(f"⚠ {len(result.missing_caps)} capacitor(s) on this rail have no "
                          f"model and were left out: "

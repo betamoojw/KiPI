@@ -1224,6 +1224,7 @@ class MainWindow(QMainWindow):
         self._save_setup()
         import copy
         frozen = copy.deepcopy(setup)
+        dc_result = self._tree       # the last DC solve gives the capacitors' DC bias (#74)
         report_path = None
         if frozen.ac.html_report and self._setup_path is not None:
             from kipi.ac.html_report import report_name
@@ -1234,7 +1235,7 @@ class MainWindow(QMainWindow):
             from kipi.core.mesh.mesher import MeshError
             from kipi.dc.solver import SolveError
             try:
-                result = solve_ac(snap, frozen, vrm_name, gnd, progress)
+                result = solve_ac(snap, frozen, vrm_name, gnd, progress, dc_result)
             except (ACError, MeshError, SolveError) as e:
                 progress.warn(str(e))
                 return None, str(e)

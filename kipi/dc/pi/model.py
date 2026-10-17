@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from kipi.ac.model import ACSettings, CapModel, Probe
+from kipi.ac.model import DEFAULT_KEPT_AT_RATED_PCT, ACSettings, CapModel, Probe
 from kipi.dc.solver.setup import SolveSettings
 from kipi.dc.thermal.model import ThermalSettings
 
@@ -223,7 +223,9 @@ class PISetup:
             settings=SolveSettings(**{k: v for k, v in d.get("settings", {}).items()
                                       if k in known}),
             caps=[CapModel(c["name"], c.get("capacitance_f", 0.0), c.get("esl_h", 0.0),
-                           c.get("esr_ohm", 0.0), list(c.get("refs", [])))
+                           c.get("esr_ohm", 0.0), list(c.get("refs", [])),
+                           bool(c.get("dc_bias", False)), c.get("rated_v"),
+                           c.get("kept_at_rated_pct", DEFAULT_KEPT_AT_RATED_PCT))
                   for c in d.get("caps", [])],
             probes=[Probe(p["name"], pin(p["rail"]), pin(p["ground"]), p.get("target_ohm"),
                           p.get("target_hz"), bool(p.get("target_custom", False)),

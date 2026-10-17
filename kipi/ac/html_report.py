@@ -372,15 +372,26 @@ def write_ac_report(path, result, snap: BoardSnapshot, setup, progress=None) -> 
     # ---------------- capacitors
     parts.append("<h2 id='caps'>Capacitor models</h2>")
     rows = []
+    bias = getattr(result, "cap_bias", None) or {}
     for m, n in models:
         refs = sorted((r for r in result.caps if model_of.get(r) is m), key=_natural)
         srf = m.srf_hz()
-        rows.append([_e(m.name), _si(m.capacitance_f, "F"), _si(m.esl_h, "H"),
-                     _si(m.esr_ohm, "Ω"), _hz(srf) if srf else "", str(n),
-                     _e(", ".join(refs))])
-    parts.append(_table(["Model", "C", "ESL", "ESR", "Self-resonance", "Parts on rail",
-                         "References"], rows, "caps"))
+        row = [_e(m.name), _si(m.capacitance_f, "F"), _si(m.esl_h, "H"),
+               _si(m.esr_ohm, "Ω"), _hz(srf) if srf else "", str(n), _e(", ".join(refs))]
+        if bias:
+            row.insert(2, _bias_text(m, [bias[r] for r in refs if r in bias]))
+        rows.append(row)
+    head = ["Model", "C", "ESL", "ESR", "Self-resonance", "Parts on rail", "References"]
+    if bias:
+        head.insert(2, "C at DC bias")
+    parts.append(_table(head, rows, "caps"))
+    if bias:
+        parts.append(f"<p class='note'>{_e(result.bias_note)}. The capacitance kept follows a "
+                     "typical class II ceramic's curve through each model's capacitance kept "
+                     "at its voltage rating.</p>")
     total_c = sum(m.capacitance_f * n for m, n in models)
+    total_c -= sum(model_of[r].capacitance_f - c for r, (_v, c) in bias.items()
+                   if r in model_of)
     parts.append(f"<p class='note'>{_si(total_c, 'F')} of capacitors in the model, plus "
                  f"{result.plane_capacitance_f * 1e9:.3g} nF between the rail's copper and "
                  f"{_e(result.ground)}. ESL is the part's own; the mounting (pads, vias, "
@@ -435,6 +446,20 @@ def write_ac_report(path, result, snap: BoardSnapshot, setup, progress=None) -> 
     path.write_text(doc, encoding="utf-8")
     info(f"Report written: {path} ({path.stat().st_size / 1e6:.1f} MB)")
     return path
+
+
+def _bias_text(m, at: list) -> str:
+    """A model's capacitance at the DC bias its parts see: "4.1 µF at 3.3 V (41 %)", or the
+    range over its parts; empty when it was not derated."""
+    if not at:
+        return ""
+    vs, cs = [v for v, _c in at], [c for _v, c in at]
+
+    def span(lo, hi, fmt):
+        return fmt(lo) if abs(hi - lo) <= 1e-3 * max(abs(hi), 1e-30) else f"{fmt(lo)} to {fmt(hi)}"
+    kept = span(min(cs) / m.capacitance_f, max(cs) / m.capacitance_f, lambda x: f"{x:.0%}")
+    return (f"{span(min(cs), max(cs), lambda c: _si(c, 'F'))} at "
+            f"{span(min(vs), max(vs), lambda v: f'{v:.3g} V')} ({kept})")
 
 
 def _natural(ref: str):

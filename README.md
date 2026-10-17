@@ -498,7 +498,13 @@ series links with DC mode (fields only DC mode uses are grayed out) and adds:
   **Tick same value + footprint**, **Tick shown** and **Untick shown** for many at once.
   The table shows each part's footprint, so 0402 and 0603 parts of one value can get
   different models. Enter only the part's own ESL: its mounting (pads,
-  vias, planes) is simulated. **Important**: Ensure that capacitors of the same value in different case sizes are modelled independently, as no two capacitors are created the same. Modelling of DC bias and dielectric effect to be added in a future release.
+  vias, planes) is simulated. **Important**: Ensure that capacitors of the same value in different case sizes are modelled independently, as no two capacitors are created the same.
+  **Estimate DC bias** derates a ceramic model (X5R, X7R…) by the DC voltage across each of
+  its parts: enter its **Voltage rating** and how much capacitance it **Keeps at rating**
+  (from the datasheet's DC bias curve; 40 % by default). The voltage is what the last DC
+  solve found across each part, or else the rail's VRM set point. **Models from values**
+  reads the rating from values such as `10uF 6.3V X5R` and ticks the box for class II
+  dielectrics.
 * **Probes tab**: Defines where to plot the PDN impedance, usually a device's supply and ground
   pins. Each probe has a target impedance and frequency range: **flat** (an impedance up to a frequency) or **custom**, a
   piecewise-linear mask through frequency/impedance points on the log-log plot.
@@ -511,7 +517,8 @@ series links with DC mode (fields only DC mode uses are grayed out) and adds:
   ["Power Distribution System Design Methodology and Capacitor Selection for Modern CMOS
   Technology"](https://doi.org/10.1109/6040.784476), IEEE Trans. Adv. Packaging, 1999.
 * **Sweep tab**: start and stop frequency, points per decade, and how many copper field
-  solves per decade (the copper's response is interpolated between them).
+  solves per decade (the copper's response is interpolated between them). **Capacitor DC
+  bias** turns the DC bias estimate on or off for every model at once.
 * **Mesh tab**: mesh size, minimum edge at plated holes (which sets the via inductance),
   dielectric loss tangent and default εr.
 

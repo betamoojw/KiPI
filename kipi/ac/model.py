@@ -10,6 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
+# DC bias (#74): a class II ceramic (X5R, X7R...) keeps 1 / (1 + k (V / V_rated)^BIAS_EXP)
+# of its capacitance at V volts, with k set by what it keeps at its rated voltage. It is
+# a typical curve's shape; the datasheet's curve is better where there is one.
+BIAS_EXP = 1.5
+DEFAULT_KEPT_AT_RATED_PCT = 40.0
+
 if TYPE_CHECKING:                       # PinRef lives in the setup model, which imports us
     from kipi.dc.pi.model import PinRef
 
@@ -22,6 +28,19 @@ class CapModel:
     esl_h: float = 0.0
     esr_ohm: float = 0.0
     refs: List[str] = field(default_factory=list)   # footprint references using this model
+    # DC bias (#74): derate the capacitance by the DC voltage across each part.
+    dc_bias: bool = False
+    rated_v: Optional[float] = None     # DC voltage rating
+    kept_at_rated_pct: float = DEFAULT_KEPT_AT_RATED_PCT   # capacitance left at rated_v
+
+    def capacitance_at(self, volts: float) -> float:
+        """One part's capacitance with ``volts`` DC across it: derated when the model
+        estimates DC bias and has a rating, else its capacitance as entered."""
+        if not (self.dc_bias and self.rated_v and self.rated_v > 0 and volts):
+            return self.capacitance_f
+        kept = min(max(self.kept_at_rated_pct, 1.0), 100.0) / 100.0
+        k = 1.0 / kept - 1.0
+        return self.capacitance_f / (1.0 + k * (abs(volts) / self.rated_v) ** BIAS_EXP)
 
     def impedance(self, omega):
         """Complex impedance at angular frequency ``omega`` (scalar or array)."""
@@ -74,6 +93,8 @@ class ACSettings:
     rail: str = ""
     ground: str = ""
     html_report: bool = False             # write an HTML report after each rail's solve
+    # Derate the capacitor models that estimate DC bias (#74); off: every model as entered.
+    dc_bias: bool = True
 
     def frequencies(self):
         import numpy as np

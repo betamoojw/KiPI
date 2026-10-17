@@ -1104,12 +1104,26 @@ are required.</p>
   <tr><th>Control</th><th>What it does</th></tr>
   <tr><td><b>Models from values</b></td><td class="wrap">Creates one model per distinct value
     among the capacitors that have none yet, named after the value, with the capacitance read
-    from it. Enter ESL and ESR yourself.</td></tr>
-  <tr><td>Capacitance</td><td class="wrap">Per part. For ceramics, use the effective value at
-    the rail's DC bias if the datasheet gives it.</td></tr>
+    from it, and the voltage rating when the value gives one (<code>10uF 6.3V X5R</code>).
+    Enter ESL and ESR yourself.</td></tr>
+  <tr><td>Capacitance</td><td class="wrap">Per part, with no DC bias. For a ceramic, tick
+    <b>Estimate DC bias</b>, or enter the effective value at the rail's voltage if the
+    datasheet gives it.</td></tr>
   <tr><td>ESL</td><td class="wrap">The part's own inductance (datasheet), not including
     mounting.</td></tr>
   <tr><td>ESR</td><td class="wrap">Per part.</td></tr>
+  <tr><td><b>Estimate DC bias</b></td><td class="wrap">Class II ceramics (X5R, X7R, X6S…) lose
+    capacitance with DC voltage. Ticked, each part's capacitance is derated by the DC voltage
+    across it: what the last DC solve found across its pads, or else the rail's VRM set
+    point. The Results notes and the HTML report give the voltages and the capacitance left.
+    <b>Models from values</b> ticks it for values naming a class II dielectric. Leave it
+    unticked for C0G, polymer and electrolytic parts.</td></tr>
+  <tr><td>Voltage rating</td><td class="wrap">The part's rated DC voltage, which the estimate
+    is scaled by. Needed when Estimate DC bias is ticked.</td></tr>
+  <tr><td>Kept at rating</td><td class="wrap">How much of its capacitance the part keeps at its
+    rated voltage, from the datasheet's DC bias curve (40 % by default; often 30 to 50 %, and
+    less for smaller cases). Between 0 V and beyond the rating, the capacitance follows
+    C / (1 + k (V / V<sub>rated</sub>)<sup>1.5</sup>), a typical X5R/X7R curve's shape.</td></tr>
   <tr><td>Filter box</td><td class="wrap">Narrows the parts table by reference, value, footprint,
     net or model.</td></tr>
   <tr><td>Parts table</td><td class="wrap">Every capacitor (reference <code>C…</code>) whose pads
@@ -1213,6 +1227,9 @@ Distribution System Design Methodology and Capacitor Selection for Modern CMOS T
     in between, its response is interpolated (smoothly, it varies slowly).
     <i>Every point</i> solves the copper at each sweep frequency: exact and slowest. Raise
     this if sharp plane resonances look under-resolved.</td></tr>
+  <tr><td>Capacitor DC bias</td><td class="wrap">Ticked (the default), the capacitor models
+    with <b>Estimate DC bias</b> are derated by the DC voltage across each part. Untick it to
+    solve with every model's capacitance as entered.</td></tr>
 </table>
 </div>
 </details>
