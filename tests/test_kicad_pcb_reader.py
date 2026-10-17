@@ -33,9 +33,13 @@ def boards(request):
 # --- the file against the KiCad API -----------------------------------------------------
 
 def test_board_identity_matches_kicad(boards):
-    """Setups are found by board name and project folder, so these must be KiCad's."""
+    """Setups are found by board name and project folder, so these must be KiCad's: the
+    board's file name, and the folder it is in. (The reference names that folder as it
+    was on the computer that made it.)"""
     _, snap, ref = boards
-    assert (snap.board_name, Path(snap.project_dir)) == (ref.board_name, Path(ref.project_dir))
+    assert snap.board_name == ref.board_name
+    assert Path(snap.project_dir) == DATA.resolve()
+    assert ref.project_dir.replace("\\", "/").endswith("tests/data/kicad_pcb")
     assert snap.source_format == "kicad-pcb"
     assert snap.assumed == []
 

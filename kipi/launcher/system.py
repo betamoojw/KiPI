@@ -160,11 +160,33 @@ def wait_for_exit(pid: int, timeout: float = 60.0, poll: float = 0.2) -> bool:
         finally:
             ctypes.windll.kernel32.CloseHandle(handle)
     while time.monotonic() < deadline:
-        try:
-            os.kill(int(pid), 0)
-        except ProcessLookupError:
+        if _ended(int(pid)):
             return True
-        except PermissionError:         # alive, but someone else's
-            pass
         time.sleep(poll)
     return False
+
+
+def _ended(pid: int) -> bool:
+    """POSIX: whether ``pid`` has ended. A process that has exited stays as a zombie, which
+    ``kill(pid, 0)`` still finds, until its parent collects it: a child of ours is
+    collected here, and anyone else's zombie counts as ended."""
+    try:
+        done, _ = os.waitpid(pid, os.WNOHANG)
+        if done == pid:
+            return True
+    except ChildProcessError:           # not our child
+        pass
+    except OSError:
+        pass
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:             # alive, but someone else's
+        return False
+    try:                                # Linux: a zombie's state is Z
+        with open(f"/proc/{pid}/stat") as f:
+            stat = f.read()
+        return stat.rsplit(")", 1)[1].split()[0] == "Z"
+    except (OSError, IndexError):
+        return False
