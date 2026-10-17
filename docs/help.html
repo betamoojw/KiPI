@@ -446,8 +446,10 @@ draws it. The window can stay open beside the main window.</p>
     core. KiCad's own name for the material is listed too when it is not one of these.
     Choosing a material sets its typical εr (a datasheet value near 1 GHz; type another if
     your laminate's differs) and its in-plane thermal conductivity <b>k</b>, which the
-    electro-thermal solve uses unless the Thermal tab's <b>Laminate k</b> overrides it. A ⚠
-    beside k means KiPI did not recognize KiCad's name and took the layer as FR4.</td></tr>
+    electro-thermal solve uses. Type over k, unlocked, if your laminate's differs; choosing a
+    material again goes back to its typical value. A ⚠ beside k means KiPI did not recognize
+    KiCad's name and took the layer as FR4. Setups from before 0.8.0 with a Thermal tab
+    <b>Laminate k</b> open with that value as every dielectric's k.</td></tr>
   <tr><td><b>Material</b> (copper layers)</td><td class="wrap">What each copper layer is
     made of. <i>Copper (board Resistivity)</i> uses the <b>Resistivity</b> and <b>TCR</b> below.
     Or choose annealed copper, electrodeposited or rolled-annealed copper foil (IPC-4562's
@@ -851,11 +853,6 @@ copper becoming more resistive. KiPI alternates electrical and thermal solves.</
     Convection is h = 10 + 3.8·v W/m²K per face.</td></tr>
   <tr><td>Grid</td><td class="wrap">Thermal cell size; <i>auto</i> is about 250 cells across
     the board.</td></tr>
-  <tr><td>Laminate k</td><td class="wrap">In-plane dielectric conductivity. <i>From stackup</i>
-    looks it up from each dielectric's material name (FR4, prepregs, polyimide, PTFE, Rogers,
-    ceramic, aluminum…), falling back to FR4 with a warning. The
-    <a href="#stackup">Stackup window</a> shows each dielectric's k and lets you choose
-    another material.</td></tr>
   <tr><td>Include load power dissipation</td><td class="wrap">Off by default. When ticked,
     each load heats the board with the power it draws: the sum over its supply and ground
     pins of pin current × pin voltage, spread over those pins. A load without ground pins is

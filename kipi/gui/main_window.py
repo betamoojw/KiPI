@@ -1283,6 +1283,16 @@ class MainWindow(QMainWindow):
             setup.stackup = None
             self.log(f"Stackup: the setup's edited stackup no longer fits the board "
                      f"({why}); using KiCad's", logging.WARNING)
+        if setup.legacy_laminate_k > 0:
+            # Laminate k left the thermal settings for the Stackup window in 0.8.0 (#90).
+            from kipi.core.model.stackup import to_setup, with_dielectric_k
+            k = setup.legacy_laminate_k
+            setup.legacy_laminate_k = 0.0
+            edited = with_dielectric_k(edited or self._imported_stackup, k)
+            snap.stackup = edited
+            setup.stackup = to_setup(edited)
+            self.log(f"Stackup: the thermal settings' Laminate k ({k:g} W/m·K) is now each "
+                     "dielectric's k in the Stackup window")
         self.stackup_window.set_board(self._imported_stackup, snap.stackup, setup,
                                       self._layer_colors())
 

@@ -33,6 +33,9 @@ def _round(obj: Any) -> Any:
 def to_dict(snap: BoardSnapshot) -> Dict[str, Any]:
     d = _round(dataclasses.asdict(snap))
     d.pop("file")             # where this copy was read from says nothing about the board
+    for x in d["stackup"]["dielectrics"]:
+        if not x["k_w_mk"]:   # unset: leave it out, so KiPI before 0.8.0 still reads the file
+            del x["k_w_mk"]
     # JSON object keys must be strings; layer-keyed dicts are converted back on load.
     for pad in d["pads"]:
         pad["shapes"] = {str(k): v for k, v in pad["shapes"].items()}

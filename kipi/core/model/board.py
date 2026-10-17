@@ -55,6 +55,9 @@ class DielectricLayer:
     epsilon_r: float = 0.0
     above_layer: int = -1   # copper layer id directly above
     below_layer: int = -1   # copper layer id directly below
+    # In-plane thermal conductivity, W/(m K), set in the Stackup window; 0 = the typical
+    # value for its material (kipi.dc.thermal.materials).
+    k_w_mk: float = 0.0
 
 
 @dataclass

@@ -125,27 +125,36 @@ def dielectric_er(stackup: Stackup) -> List[float]:
     return [e.epsilon_r for e in stack_order(stackup) if isinstance(e, DielectricLayer)]
 
 
+def dielectric_k(stackup: Stackup) -> List[float]:
+    """The dielectrics' thermal conductivities set in KiPI (0: their material's), top to
+    bottom."""
+    return [e.k_w_mk for e in stack_order(stackup) if isinstance(e, DielectricLayer)]
+
+
 def dielectric_materials(stackup: Stackup) -> List[str]:
     """Each dielectric's material name, top to bottom."""
     return [e.material for e in stack_order(stackup) if isinstance(e, DielectricLayer)]
 
 
 def restack(stackup: Stackup, new_mm: Sequence[float], er: Optional[Sequence[float]] = None,
-            edited: bool = True, materials: Optional[Sequence[str]] = None) -> Stackup:
+            edited: bool = True, materials: Optional[Sequence[str]] = None,
+            k: Optional[Sequence[float]] = None) -> Stackup:
     """``stackup`` with the layers' thicknesses set to ``new_mm`` (in :func:`stack_order`),
-    restacked from z = 0 at the bottom, and the dielectrics' εr and material names set to
-    ``er`` and ``materials`` (top to bottom) when given."""
+    restacked from z = 0 at the bottom, and the dielectrics' εr, material names and thermal
+    conductivities set to ``er``, ``materials`` and ``k`` (top to bottom) when given."""
     order = stack_order(stackup)
     if len(new_mm) != len(order):
         raise ValueError(f"{len(new_mm)} thicknesses for {len(order)} layers")
     n_diel = len(order) - len(stackup.copper)
     ers = list(dielectric_er(stackup) if er is None else er)
     mats = list(dielectric_materials(stackup) if materials is None else materials)
-    if len(ers) != n_diel or len(mats) != n_diel:
-        raise ValueError(f"{len(ers)} εr values and {len(mats)} materials for {n_diel} "
-                         "dielectrics")
+    ks = list(dielectric_k(stackup) if k is None else k)
+    if len(ers) != n_diel or len(mats) != n_diel or len(ks) != n_diel:
+        raise ValueError(f"{len(ers)} εr values, {len(mats)} materials and {len(ks)} k values "
+                         f"for {n_diel} dielectrics")
     ers.reverse()
     mats.reverse()
+    ks.reverse()
     z = sum(new_mm)
     copper: List[CopperLayer] = []
     dielectrics: List[DielectricLayer] = []
@@ -155,25 +164,26 @@ def restack(stackup: Stackup, new_mm: Sequence[float], er: Optional[Sequence[flo
             copper.append(replace(e, thickness_mm=float(t), z_bottom_mm=z))
         else:
             dielectrics.append(replace(e, thickness_mm=float(t), epsilon_r=float(ers.pop()),
-                                       material=str(mats.pop())))
+                                       material=str(mats.pop()), k_w_mk=float(ks.pop())))
     return Stackup(copper=copper, dielectrics=dielectrics, board_thickness_mm=sum(new_mm),
                    from_board=stackup.from_board, edited=edited)
 
 
 def to_setup(stackup: Stackup) -> Dict:
     """The stackup as kept in the setup file: copper thickness by layer name, dielectric
-    thickness, εr and material in order, top to bottom."""
+    thickness, εr, material and thermal conductivity in order, top to bottom."""
     return {"copper_mm": {c.name: c.thickness_mm for c in stackup.copper},
             "dielectric_mm": [d.thickness_mm for d in stack_order(stackup)
                               if isinstance(d, DielectricLayer)],
             "dielectric_er": dielectric_er(stackup),
-            "dielectric_material": dielectric_materials(stackup)}
+            "dielectric_material": dielectric_materials(stackup),
+            "dielectric_k": dielectric_k(stackup)}
 
 
 def from_setup(stackup: Stackup, saved: Optional[Dict]) -> Tuple[Optional[Stackup], str]:
-    """``stackup`` with the thicknesses, εr and materials ``saved`` by :func:`to_setup`, and
-    "" — or None and the reason when they no longer fit the board (a layer added, removed
-    or renamed). A setup saved without εr or materials keeps the board's."""
+    """``stackup`` with the thicknesses, εr, materials and k ``saved`` by :func:`to_setup`,
+    and "" — or None and the reason when they no longer fit the board (a layer added,
+    removed or renamed). A setup saved without εr, materials or k keeps the board's."""
     if not saved:
         return None, ""
     cu = saved.get("copper_mm") or {}
@@ -195,7 +205,16 @@ def from_setup(stackup: Stackup, saved: Optional[Dict]) -> Tuple[Optional[Stacku
     er = [float(x) for x in er] if er is not None and len(er) == n_diel else None
     mats = saved.get("dielectric_material")
     mats = [str(m) for m in mats] if mats is not None and len(mats) == n_diel else None
-    return restack(stackup, values, er, materials=mats), ""
+    k = saved.get("dielectric_k")
+    k = [float(x) for x in k] if k is not None and len(k) == n_diel else None
+    return restack(stackup, values, er, materials=mats, k=k), ""
+
+
+def with_dielectric_k(stackup: Stackup, k_w_mk: float) -> Stackup:
+    """``stackup`` with every dielectric's thermal conductivity set to ``k_w_mk``: the
+    board-wide Laminate k of setups from before 0.8.0 (#90)."""
+    return restack(stackup, thicknesses(stackup), materials=dielectric_materials(stackup),
+                   k=[k_w_mk] * len(dielectric_k(stackup)))
 
 
 def summary(stackup: Stackup) -> str:

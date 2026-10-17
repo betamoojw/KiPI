@@ -1371,17 +1371,11 @@ class PIPanel(QWidget):
         self.spin_airflow.setSpecialValueText("still air")
         self.spin_tgrid = _spin(0, 10, t.grid_mm, 2, " mm", 0.1)
         self.spin_tgrid.setSpecialValueText("auto")
-        self.spin_lam_k = _spin(0, 500, t.laminate_k_w_mk, 2, " W/m·K", 0.1)
-        self.spin_lam_k.setSpecialValueText("from stackup")
-        self.spin_lam_k.setToolTip("In-plane conductivity of the dielectric. 'From stackup' "
-                                   "looks it up from each dielectric's material name "
-                                   "(FR4, polyimide, Kapton, PTFE, Rogers, ceramic, Al...).")
         f.addRow(self.chk_thermal)
         f.addRow("Ambient", self.spin_ambient)
         f.addRow("Iterations", self.spin_iters)
         f.addRow("Airflow", self.spin_airflow)
         f.addRow("Grid", self.spin_tgrid)
-        f.addRow("Laminate k", self.spin_lam_k)
         self.chk_load_power = QCheckBox("Include load power dissipation")
         self.chk_load_power.setChecked(t.load_power)
         self.chk_load_power.setToolTip(
@@ -1399,7 +1393,6 @@ class PIPanel(QWidget):
                                   "across. Faster air cools the board more.")
         tip(f, self.spin_tgrid, "Cell size of the thermal grid. 'Auto' gives about 250 cells "
                                 "across the board.")
-        tip(f, self.spin_lam_k, self.spin_lam_k.toolTip())
         self.spin_max_t = _spin(0, 500, t.max_temp_c or 0.0, 1, " °C", 5)
         self.spin_max_t.setSpecialValueText("none")
         self.spin_max_t.setToolTip("Copper hotter than this, on any layer, is marked FAIL")
@@ -1414,14 +1407,14 @@ class PIPanel(QWidget):
         note = QLabel("Heat from every net and layer (copper, vias, DC parts, VRM conversion "
                       "loss and, if ticked, load power) spreads through the board's copper "
                       "and laminate and leaves both faces by convection: h = 10 + 3.8·v W/m²K "
-                      "per face.")
+                      "per face. Each layer's thermal conductivity is in the Stackup window.")
         note.setWordWrap(True)
         note.setStyleSheet("color: #999;")
         f.addRow(note)
         self.chk_thermal.toggled.connect(self._thermal_changed)
         self.chk_load_power.toggled.connect(self._thermal_changed)
-        for wdg in (self.spin_ambient, self.spin_airflow, self.spin_tgrid, self.spin_lam_k,
-                    self.spin_max_t, self.spin_max_rise):
+        for wdg in (self.spin_ambient, self.spin_airflow, self.spin_tgrid, self.spin_max_t,
+                    self.spin_max_rise):
             wdg.valueChanged.connect(self._thermal_changed)
         self.spin_iters.valueChanged.connect(self._thermal_changed)
         return w
@@ -1433,12 +1426,11 @@ class PIPanel(QWidget):
         t.iterations = self.spin_iters.value()
         t.airflow_m_s = self.spin_airflow.value()
         t.grid_mm = self.spin_tgrid.value()
-        t.laminate_k_w_mk = self.spin_lam_k.value()
         t.load_power = self.chk_load_power.isChecked()
         t.max_temp_c = self.spin_max_t.value() or None
         t.max_rise_c = self.spin_max_rise.value() or None
         for wdg in (self.spin_ambient, self.spin_iters, self.spin_airflow, self.spin_tgrid,
-                    self.spin_lam_k, self.chk_load_power, self.spin_max_t, self.spin_max_rise):
+                    self.chk_load_power, self.spin_max_t, self.spin_max_rise):
             wdg.setEnabled(t.enabled)
         self.btn_solve.setText(self._solve_label())
         if getattr(self, "_tree", None) is not None:
@@ -1540,7 +1532,6 @@ class PIPanel(QWidget):
         t = setup.thermal
         for wdg, val in ((self.spin_ambient, t.ambient_c), (self.spin_iters, t.iterations),
                          (self.spin_airflow, t.airflow_m_s), (self.spin_tgrid, t.grid_mm),
-                         (self.spin_lam_k, t.laminate_k_w_mk),
                          (self.spin_max_t, t.max_temp_c or 0.0),
                          (self.spin_max_rise, t.max_rise_c or 0.0),
                          (self.chk_thermal, t.enabled), (self.chk_load_power, t.load_power),

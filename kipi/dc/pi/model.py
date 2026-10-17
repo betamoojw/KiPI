@@ -141,6 +141,9 @@ class PISetup:
     # Stackup thicknesses edited in the Stackup pane (kipi.core.model.stackup.to_setup);
     # None = use the board's own.
     stackup: Optional[Dict] = None
+    # The thermal settings' Laminate k from a setup made before 0.8.0, W/(m K), for the
+    # GUI to move into the stackup (#90); never saved.
+    legacy_laminate_k: float = field(default=0.0, repr=False, compare=False)
     # AC analysis
     caps: List[CapModel] = field(default_factory=list)
     probes: List[Probe] = field(default_factory=list)
@@ -166,6 +169,7 @@ class PISetup:
     # ------------------------------------------------------------------ JSON
     def to_dict(self) -> dict:
         d = dataclasses.asdict(self)
+        d.pop("legacy_laminate_k")
         d["format_version"] = FORMAT_VERSION
         return d
 
@@ -206,6 +210,7 @@ class PISetup:
             nets=list(d["nets"]) if d.get("nets") is not None else None,
             excluded_nets=list(d.get("excluded_nets", [])),
             stackup=d.get("stackup") or None,
+            legacy_laminate_k=float(d.get("thermal", {}).get("laminate_k_w_mk") or 0.0),
             settings=SolveSettings(**{k: v for k, v in d.get("settings", {}).items()
                                       if k in known}),
             caps=[CapModel(c["name"], c.get("capacitance_f", 0.0), c.get("esl_h", 0.0),

@@ -130,7 +130,9 @@ def test_laminate_conductance_follows_stackup_materials():
     st.dielectrics = [DielectricLayer(1.5, "Ceramic")]
     g_cer, _ = laminate_conductance(st)
     assert g_cer == pytest.approx(24e-3 * 1.5)
-    assert laminate_conductance(st, override_k_w_mk=2.0)[0] == pytest.approx(2e-3 * 1.5)
+    st.dielectrics = [DielectricLayer(1.5, "Ceramic", k_w_mk=2.0)]    # set in the Stackup window
+    g_set, rows = laminate_conductance(st)
+    assert g_set == pytest.approx(2e-3 * 1.5) and rows[0][2].matched == "set in the Stackup window"
     # A ceramic board spreads heat far better: the hot spot is much cooler.
     peaks = []
     for mat in ("FR4", "Ceramic"):

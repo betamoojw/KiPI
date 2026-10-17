@@ -98,6 +98,11 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
 - `kicad-python` is now the `kicad` extra of the Python package
   (`pip install -e "<KiPI folder>[kicad]"`), since standalone KiPI does not need it. `requirements.txt`, which KiCad installs for the
   plugin, still includes it.
+- **Laminate k** is gone from the thermal settings (#90). Each dielectric's thermal
+  conductivity is now edited in the Stackup window's k column instead: choosing a material
+  still sets its typical value, and it can be typed over while unlocked. The setup file
+  keeps it with the other stackup edits. A setup with a Laminate k opens with that value as
+  every dielectric's k.
 - The Airflow tooltip and help say the air flows parallel to the board in a fixed direction,
   cooling every point equally (#98).
 

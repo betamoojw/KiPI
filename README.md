@@ -256,7 +256,8 @@ with its thickness (in µm, mm, mil or oz), each dielectric's material, εr and 
 conductivity, and each copper layer's conductor and resistivity, with the copper
 **Resistivity** and **TCR** for the whole board. The stackup is locked to KiCad's values by
 default; untick **Lock to imported values** to try other thicknesses, materials and εr
-(choosing a material from the list sets its typical εr and thermal conductivity). Every DC
+(choosing a material from the list sets its typical εr and thermal conductivity, and both
+can be typed over). Every DC
 and AC analysis uses the edited stackup, and the setup keeps it. A copper layer's conductor
 (copper foils, silver, gold, aluminum, nickel or tin) sets its resistivity, TCR and thermal
 conductivity, and can be changed while the stackup is locked. This can be used to explore how material and thickness properties impact power distribution performance. KiCad's API cannot change a
@@ -358,10 +359,9 @@ the board and the warmer copper become more resistive. Set:
   changed.
 * **Airflow** in m/s.
 * **Grid**, the thermal cell size: *auto* gives about 250 cells across the board.
-* **Laminate k**: *from stackup* looks up the in-plane conductivity from each dielectric's
-  material in your KiCad stackup (FR4, prepreg types, polyimide, Kapton, PTFE, Rogers,
-  ceramic, aluminum…). Unrecognized names fall back to FR4 with a warning. Enter a value
-  here to override.
+* The laminate's in-plane thermal conductivity is each dielectric's **k** in the Stackup
+  window, looked up from its material (FR4, prepreg types, polyimide, Kapton, PTFE, Rogers,
+  ceramic, aluminum…; unrecognized names fall back to FR4 with a warning) or typed in there.
 * **Include load power dissipation** (off by default): each load also heats the board with
   the power it draws, the sum over its supply and ground pins of pin current × pin voltage,
   spread over those pins. DC connection (series link) I²R losses always heat their pins.

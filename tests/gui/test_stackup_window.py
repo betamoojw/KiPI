@@ -236,10 +236,9 @@ def test_choosing_a_material_sets_its_er_and_k(app, unit_setting):
     assert box.currentData() == kicad_name
     win.chk_lock.setChecked(False)
     assert box.isEnabled()
-    row = _diel_rows(win)[0]
     box.setCurrentIndex(box.findData("Rogers RO4350B"))
     assert win._er_spins[0].value() == pytest.approx(3.48)
-    assert win.table.item(row, C_K).text() == "0.69"
+    assert win._k_spins[0].value() == pytest.approx(0.69)
     win.flush()
     edited = got[-1]
     assert dielectric_materials(edited)[0] == "Rogers RO4350B"
@@ -290,3 +289,64 @@ def test_choosing_a_conductor_sets_rho_tcr_and_k(app, unit_setting):
     win.set_board(st, setup=back)
     assert win._cond_boxes[name].currentData() == "Gold"
     assert win._cond_boxes[st.copper[1].name].currentText() == "Custom resistivity"
+
+
+# --- Dielectric k edited in the window (#90) --------------------------------------------------
+
+def test_dielectric_k_can_be_typed_over_and_reset(app, unit_setting):
+    from kipi.core.model.stackup import dielectric_k, from_setup, to_setup
+    from kipi.dc.thermal.materials import laminate_conductance, lookup
+    st = board().stackup
+    win = StackupWindow()
+    got = []
+    win.stackup_changed.connect(got.append)
+    win.set_board(st, setup=PISetup())
+    spin = win._k_spins[0]
+    assert spin.isReadOnly()                             # locked
+    assert spin.value() == pytest.approx(lookup(st.dielectrics[0].material).k_w_mk)
+    win.chk_lock.setChecked(False)
+    spin.setValue(3.5)
+    win.flush()
+    edited = got[-1]
+    assert dielectric_k(edited)[0] == 3.5 and edited.edited
+    _, rows = laminate_conductance(edited)
+    assert rows[0][2].k_w_mk == 3.5
+    again, why = from_setup(st, to_setup(edited))        # kept in the setup file
+    assert why == "" and dielectric_k(again)[0] == 3.5
+    box = win._mat_boxes[0]                              # a material sets its typical k
+    box.setCurrentIndex(box.findData("Rogers RO4350B"))
+    assert win._k[0] == 0.0 and spin.value() == pytest.approx(0.69)
+    spin.setValue(9.0)
+    win.chk_lock.setChecked(True)                        # locking resets it
+    assert dielectric_k(got[-1]) == dielectric_k(st) and win._k_spins[0].isReadOnly()
+
+
+def test_old_setup_laminate_k_moves_to_the_stackup(app, no_3d, tmp_path, unit_setting):
+    import json
+    from kipi.core.model.stackup import dielectric_k
+    from kipi.dc.pi.model import setup_path
+    from kipi.gui.main_window import MainWindow
+    snap = board()
+    snap.project_dir = str(tmp_path)
+    path = setup_path(snap.board_name, snap.project_dir)
+    path.write_text(json.dumps({"thermal": {"enabled": True, "laminate_k_w_mk": 1.7}}))
+    assert PISetup.load(path).legacy_laminate_k == 1.7
+    assert "legacy_laminate_k" not in PISetup.load(path).to_dict()
+    w = MainWindow()
+    w._set_snapshot(snap)
+    _idle(app, w)
+    st = w.snapshot.stackup
+    assert st.edited and set(dielectric_k(st)) == {1.7}
+    assert w.solve_panel.setup.stackup["dielectric_k"] == [1.7] * len(st.dielectrics)
+    assert not w.stackup_window.chk_lock.isChecked()
+    w.close()
+
+
+def test_snapshots_leave_out_an_unset_k():
+    from kipi.core.model import snapshot_io
+    snap = board()
+    d = snapshot_io.to_dict(snap)
+    assert all("k_w_mk" not in x for x in d["stackup"]["dielectrics"])
+    snap.stackup.dielectrics[0].k_w_mk = 2.5
+    back = snapshot_io.from_dict(snapshot_io.to_dict(snap))
+    assert back.stackup.dielectrics[0].k_w_mk == 2.5
