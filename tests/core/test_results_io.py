@@ -7,6 +7,7 @@ import json
 import math
 import os
 import pickle
+import sys
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
@@ -168,9 +169,12 @@ def test_paths_from_any_python_open(module):
 
 def test_a_windows_path_in_a_legacy_pickle_opens_anywhere():
     blob = pickle.dumps({"p": PureWindowsPath(r"C:\x\r.html")})
-    # This machine's Path from the saved parts: C:\x\r.html on Windows, and no error
-    # elsewhere.
-    assert compat.Unpickler(io.BytesIO(blob)).load()["p"] == Path("C:\\", "x", "r.html")
+    # This machine's Path: C:\x\r.html on Windows. Elsewhere it opens without an error, as
+    # one name or as parts depending on how this Python pickles paths (3.13 changed it).
+    p = compat.Unpickler(io.BytesIO(blob)).load()["p"]
+    assert isinstance(p, Path) and str(p).replace("\\", "/").endswith("x/r.html")
+    if sys.platform == "win32":
+        assert p == Path(r"C:\x\r.html")
 
 
 def _rewrite(path, change):
