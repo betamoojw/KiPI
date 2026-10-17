@@ -1,0 +1,141 @@
+"""What this computer can run: a Python for KiPI's environment, and the PARDISO solver."""
+
+from __future__ import annotations
+
+import os
+import platform as _platform
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from typing import Callable, List, Optional, Sequence, Tuple
+
+#: Pythons KiPI's dependencies have prebuilt packages for (Triangle and PyAMG have none for
+#: 3.14 yet, so pip would have to compile them).
+SUPPORTED = ((3, 10), (3, 13))
+
+
+def is_supported(version: Sequence[int]) -> bool:
+    return SUPPORTED[0] <= tuple(version[:2]) <= SUPPORTED[1]
+
+
+def supported_text() -> str:
+    (a, b), (c, d) = SUPPORTED
+    return f"Python {a}.{b} to {c}.{d}"
+
+
+def pardiso_supported(system: Optional[str] = None,
+                      machine: Optional[str] = None) -> Tuple[bool, str]:
+    """Whether PARDISO can be installed here, and if not, why. Intel MKL, which it needs,
+    is published for Windows and Linux on x86-64 only."""
+    system = system or _platform.system()
+    machine = (machine or _platform.machine()).lower()
+    if system not in ("Windows", "Linux"):
+        return False, f"Intel MKL is not available for {system}"
+    if machine not in ("amd64", "x86_64", "x64"):
+        return False, f"Intel MKL is not available for {machine} processors"
+    return True, ""
+
+
+# --- Finding a Python for the environment ------------------------------------------------
+
+@dataclass(frozen=True)
+class Python:
+    executable: str
+    version: Tuple[int, int, int]
+    has_venv: bool               # the venv module and ensurepip work (Debian splits them out)
+
+    @property
+    def version_text(self) -> str:
+        return ".".join(str(v) for v in self.version)
+
+
+_PROBE = ("import sys, json\n"
+          "try:\n"
+          "    import venv, ensurepip\n"
+          "    ok = True\n"
+          "except ImportError:\n"
+          "    ok = False\n"
+          "print(json.dumps([sys.executable, list(sys.version_info[:3]), ok]))\n")
+
+
+def probe(command: Sequence[str], timeout: float = 20.0) -> Optional[Python]:
+    """What Python ``command`` runs, or None if it does not run."""
+    import json
+    try:
+        out = subprocess.run(list(command) + ["-c", _PROBE], capture_output=True, text=True,
+                             timeout=timeout, **no_window())
+        exe, version, ok = json.loads(out.stdout.strip().splitlines()[-1])
+        return Python(exe, tuple(version), bool(ok))
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return None
+
+
+def candidates(platform: Optional[str] = None,
+               which: Callable[[str], Optional[str]] = shutil.which) -> List[List[str]]:
+    """Commands that may run a supported Python, best first: the one running the launcher,
+    then the newest supported version the system can find."""
+    platform = platform or sys.platform
+    found = [[sys.executable]]
+    minors = range(SUPPORTED[1][1], SUPPORTED[0][1] - 1, -1)
+    if platform == "win32":
+        py = which("py")
+        if py:
+            found += [[py, f"-3.{m}"] for m in minors]
+    else:
+        found += [[p] for p in (which(f"python3.{m}") for m in minors) if p]
+    uv = which("uv")
+    if uv:                       # Pythons uv installed (it never downloads one here)
+        found += [[p] for p in (_uv_python(uv, m) for m in minors) if p]
+    return found
+
+
+def _uv_python(uv: str, minor: int) -> Optional[str]:
+    try:
+        # --system: never a virtual environment that happens to be near the current folder
+        out = subprocess.run([uv, "python", "find", "--system", f"3.{minor}"],
+                             capture_output=True, text=True, timeout=20, **no_window())
+    except (OSError, subprocess.SubprocessError):
+        return None
+    path = out.stdout.strip()
+    return path if out.returncode == 0 and path else None
+
+
+def find_python(commands: Optional[List[List[str]]] = None,
+                probe_fn: Callable[[Sequence[str]], Optional[Python]] = probe
+                ) -> Tuple[Optional[Python], List[str]]:
+    """The first supported Python that can make a virtual environment, and what was wrong
+    with the others (for the message when there is none)."""
+    problems: List[str] = []
+    seen = set()
+    for cmd in commands if commands is not None else candidates():
+        p = probe_fn(cmd)
+        if p is None or p.executable in seen:
+            continue
+        seen.add(p.executable)
+        if not is_supported(p.version):
+            problems.append(f"{p.executable} is Python {p.version_text}")
+        elif not p.has_venv:
+            problems.append(f"{p.executable} (Python {p.version_text}) cannot make virtual "
+                            "environments; on Debian or Ubuntu install python3-venv")
+        else:
+            return p, problems
+    return None, problems
+
+
+def no_window() -> dict:
+    """Keep a console window from flashing up for each child process (Windows)."""
+    if sys.platform == "win32":
+        return {"creationflags": 0x08000000}    # CREATE_NO_WINDOW
+    return {}
+
+
+def can_show_windows() -> bool:
+    """Whether a Tk window can open: tkinter is there and so is a display."""
+    try:
+        import tkinter  # noqa: F401
+    except ImportError:
+        return False
+    if sys.platform.startswith("linux"):
+        return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    return True

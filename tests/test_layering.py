@@ -110,3 +110,19 @@ def test_the_gui_sees_only_source_interfaces():
                 and not any(_under(module, m) for m in ("kipi.sources.base",
                                                         "kipi.sources.registry")))
     assert _violations(rule) == []
+
+
+def test_the_launcher_needs_only_the_standard_library():
+    """The launcher runs before KiPI's dependencies are installed."""
+    import sys
+    stdlib = getattr(sys, "stdlib_module_names", None)
+    if stdlib is None:
+        pytest.skip("needs Python 3.10's list of standard modules")
+
+    def rule(rel, module):
+        if not (rel.startswith("kipi/launcher/") or rel == "kipi/__init__.py"):
+            return False
+        top = module.split(".")[0]
+        return not (top in stdlib or module == "kipi" or _under(module, "kipi.launcher")
+                    or module in ("kipi.__version__", "__future__.annotations"))
+    assert _violations(rule) == []

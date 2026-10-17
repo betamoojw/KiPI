@@ -35,3 +35,8 @@ def test_standalone_needs_no_kicad():
 def test_dev_tools_match():
     dev = {d.replace(" ", "") for d in _pyproject()["optional-dependencies"]["dev"]}
     assert _requirements(ROOT / "requirements-dev.txt") == dev
+
+
+def test_the_launcher_installs_what_standalone_needs():
+    standalone = {d.replace(" ", "") for d in _pyproject()["dependencies"]}
+    assert _requirements(ROOT / "requirements-standalone.txt") == standalone
