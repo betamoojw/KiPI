@@ -88,8 +88,10 @@ def load_powers(tree: TreeResult, snap: BoardSnapshot, setup: PISetup) -> Dict[s
             pids = getattr(t, "pad_ids", [])
             amps = getattr(t, "i_pads", [])
             if pids and len(amps) == len(pids):
-                watts += float(np.dot(amps, t.v_pads))
-                pads += [pid for pid in pids if pid in pos]
+                # Unconnected pins (#88) draw nothing and have no voltage.
+                on = [k for k, a in enumerate(amps) if a and not np.isnan(t.v_pads[k])]
+                watts += float(sum(amps[k] * t.v_pads[k] for k in on))
+                pads += [pids[k] for k in on if pids[k] in pos]
             else:                       # no per-pin record: the load's current shared equally
                 sign = -1.0 if t.name.endswith(" (return)") else 1.0
                 watts += sign * t.current * t.v_mean

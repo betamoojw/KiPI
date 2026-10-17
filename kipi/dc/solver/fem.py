@@ -75,6 +75,8 @@ class Solution:
     load_current: Dict[str, float] = field(default_factory=dict)
     # A each source delivers at each of its pads, in the source's pad order (#71).
     source_pad_current: Dict[str, List[float]] = field(default_factory=dict)
+    # Optional loads' pads with no copper path to a source, which draw nothing (#88).
+    dead_pads: Dict[str, List[str]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -262,8 +264,13 @@ class LinearSystem:
         ncomp, comp = connected_components(self.K, directed=False)
         live_comps = {comp[u] for u in owner}
         live = np.isin(comp, list(live_comps))
+        # load name -> its pads with no copper path to a source (optional loads only)
+        self.dead_pads: Dict[str, List[str]] = {}
         for load in problem.loads:
-            if not all(live[self.pad_unknown[pid]] for pid in load.pad_ids):
+            dead = [pid for pid in load.pad_ids if not live[self.pad_unknown[pid]]]
+            if dead and load.optional:
+                self.dead_pads[load.name] = dead
+            elif dead:
                 srcs = ", ".join(s.name for s in problem.sources)
                 raise SolveError(f"Load {load.name} has no copper path to the source ({srcs}) "
                                  f"on {problem.net}. If KiCad shows them connected, the link "
@@ -301,8 +308,13 @@ class LinearSystem:
 
         f = np.zeros(self.nm)
         for load in prob.loads:
-            share = amps[load.name] / len(load.pad_ids)
-            for pid in load.pad_ids:
+            dead = self.dead_pads.get(load.name, ())
+            pads = [pid for pid in load.pad_ids if pid not in dead]
+            if not pads:                       # not connected at all: draws nothing
+                amps[load.name] = 0.0
+                continue
+            share = amps[load.name] / len(pads)
+            for pid in pads:
                 f[self.pad_unknown[pid]] -= share
 
         # Solve for u = V - v_ref rather than V itself. Drops are ~1e-4 of the rail
@@ -346,7 +358,8 @@ class LinearSystem:
                         series_elements=self.series, series_current=series_current,
                         tri_rho_factor=self.rho_factor, layer_rho=self.layer_rho,
                         source_voltage=volts, load_current=amps,
-                        source_pad_current=source_pad_current)
+                        source_pad_current=source_pad_current,
+                        dead_pads={k: list(v) for k, v in self.dead_pads.items()})
 
 
 def solve(snap: BoardSnapshot, mesh: NetMesh, problem: NetProblem,

@@ -322,6 +322,11 @@ To try it without a design of your own, open the example board in
   happen with remote sense, where the VRM raises its output pins to hold a sense point
   further down the copper, so pins nearer the VRM sit above the set point. A load on a net
   group whose solve did not converge shows **NOT CONVERGED** instead of a result.
+* Before solving, KiPI checks that every load pin reaches its VRM through copper or series
+  links. Unconnected pins draw nothing: the load's current goes through its other pins, or,
+  with no supply (or ground) pin connected, is left out and the load shows
+  **DISCONNECTED**. The Notes tab lists every unconnected pin. A rail with no load connected
+  at all stops the solve.
 
 ![Load editor](docs/images/setup_loads.png)
 
@@ -532,7 +537,7 @@ details.
 
 ### Tips and troubleshooting
 
-* **"No copper path" between a VRM and a load** usually means unrouted copper, an unfilled
+* **A load shows DISCONNECTED, or "no load on this rail is connected"** usually means unrouted copper, an unfilled
   zone, or a missing series link for a part between them when both have PI models defined.
 * **Unexpected voltage drop in results:** compare the board view with KiCad. Thermal reliefs, necked traces and
   via counts dominate DC drop, and the Current density view with Arrows makes the bottleneck

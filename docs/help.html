@@ -797,7 +797,8 @@ value field (<code>10m</code>, <code>4k7</code>, <code>0R1</code>, <code>5 mΩ</
 <b>ESL</b> is used by AC only. A new link starts on a part that bridges the first two ticked
 nets that are not grounds, if there is one.</p>
 <p>The nets a link joins are solved together as one group, so a group can only hold one
-VRM. A net with no copper path to its VRM is reported, not guessed at.</p>
+VRM. A load pin with no copper path to its VRM is reported, not guessed at (see
+<a href="#ts-no-path">Loads not connected by copper</a>).</p>
 </div>
 </details>
 
@@ -967,6 +968,10 @@ clipped).</p>
     upstream, is outside its input range or below its dropout.</td></tr>
   <tr><td class="warnc">NOT CONVERGED</td><td class="wrap">Its group's solve did not converge;
     the numbers cannot be trusted. See <a href="#troubleshooting">Troubleshooting</a>.</td></tr>
+  <tr><td class="warnc">DISCONNECTED</td><td class="wrap">None of its supply pins, or none of
+    its ground pins, has a copper or series-link path to its VRM, so its current was left out
+    of the solve. The Notes tab names the pins. See
+    <a href="#ts-no-path">Loads not connected by copper</a>.</td></tr>
   <tr><td>(blank)</td><td class="wrap">No tolerance set.</td></tr>
 </table>
 </div>
@@ -1603,11 +1608,21 @@ standalone KiPI) from the temporary folder.</p></div>
 <div class="body"><p>Pickers only offer nets ticked in the <a href="#nets">Nets</a> list. Tick it
 (untick <b>Power &amp; ground only</b> or use the filter to find a signal net).</p></div>
 </details>
-<details>
-<summary>"No copper path" between a VRM and a load</summary>
-<div class="body"><p>Usually unrouted copper, an unfilled zone (keep <b>Refill zones</b> on), or a
-part in series that needs a <a href="#dc-links">series link</a>. Show the net in 3D and look
-for the gap.</p></div>
+<details id="ts-no-path">
+<summary>Loads not connected by copper</summary>
+<div class="body"><p>Before solving, KiPI checks that every load pin has a path to its VRM
+through copper or <a href="#dc-links">series links</a>, and its ground pins to the ground
+reference. A pin without one draws nothing, and the Notes tab lists it:</p>
+<ul>
+  <li>Some pins of a load unconnected: its current is drawn through its other pins. A pin
+    group with no pin connected draws nothing.</li>
+  <li>No supply pin, or no ground pin, connected: the load's current is left out of the solve
+    and it shows as <b>DISCONNECTED</b>.</li>
+  <li>A rail where no load is connected at all: the solve stops with <b>Cannot solve</b>. So
+    does an unconnected VRM pin.</li>
+</ul>
+<p>The cause is usually unrouted copper, an unfilled zone (keep <b>Refill zones</b> on), or a
+part in series that needs a series link. Show the net in 3D and look for the gap.</p></div>
 </details>
 <details>
 <summary>The drop is larger than expected</summary>

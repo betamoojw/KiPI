@@ -29,6 +29,10 @@ class CurrentLoad:
     name: str
     pad_ids: List[str]
     current: float          # amps leaving the net at these pads (negative = injected)
+    # May be left unconnected (#88): pads with no copper path to a source are left out and
+    # the current is shared over the others; with none left, the load draws nothing.
+    # Otherwise an unconnected pad stops the solve.
+    optional: bool = False
 
 
 @dataclass

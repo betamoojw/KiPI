@@ -21,6 +21,12 @@ output delivers, and its input pins are a load on the group feeding it.
   output and input voltages) and returns I_out / N - I_in,phase at its ground pins; a
   source VRM's reference is phase 1's ground.
 
+Unconnected loads (#88): before solving, every group is meshed and each load pin checked
+for a path to its VRM (or ground reference) through copper or series links. A load with
+some pins unconnected draws its current through the others; with no supply pin or no
+ground pin connected, its current is left out and it shows as disconnected. The Notes
+list every unconnected pin. A rail with loads but none of them connected stops the solve.
+
 After the solve each VRM's input is checked against its dropout and input range. A VRM
 that cannot hold its set point fails every load it feeds, directly or downstream; a
 group whose iteration did not converge leaves its loads unjudged.
@@ -31,6 +37,7 @@ solved; its notes on what was left out become warnings.
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -40,6 +47,7 @@ from kipi.core.mesh.mesher import mesh_nets
 from kipi.core.model.board import BoardSnapshot
 from kipi.dc.pi.model import Load, PISetup, PinRef, Vrm, active_setup, net_groups, validate
 from kipi.dc.pi.results import (  # also importable from here, where they were defined
+    DISCONNECTED,
     NOT_CONVERGED,
     OUT_OF_REGULATION,
     GroupResult,
@@ -75,6 +83,11 @@ def _pad_voltages(sol, pad_ids: List[str]) -> np.ndarray:
                      for p in pad_ids])
 
 
+def _connected(v: np.ndarray) -> np.ndarray:
+    """The voltages of pads that are connected (unconnected ones have none)."""
+    return v[~np.isnan(v)]
+
+
 def _mean_v(sol, pad_ids: List[str]) -> float:
     return float(np.mean(_pad_voltages(sol, pad_ids)))
 
@@ -82,6 +95,12 @@ def _mean_v(sol, pad_ids: List[str]) -> float:
 def _group_load_name(load: Load, index: int) -> str:
     g = load.groups[index]
     return f"{load.name} [{g.name or ','.join(g.pins)}]"
+
+
+def _load_names(load: Load) -> List[str]:
+    """The rail terminals a setup load becomes: one, or one per pin group."""
+    return ([_group_load_name(load, i) for i in range(len(load.groups))] if load.groups
+            else [load.name])
 
 
 def _input_current(v: Vrm, v_out: float, i_out: float, v_in: float) -> float:
@@ -166,6 +185,13 @@ class _TreeSolver:
         self.order = self._downstream_first()
         self.ground_groups = self._ground_groups()
         self.built: Dict[Group, Tuple[object, LinearSystem]] = {}
+        self.rail_terms: Dict[Group, Tuple[_Rail, List[CurrentLoad]]] = {}
+        self.pad_number = {p.id: p.number for p in snap.pads}
+        # What each setup load draws after the connection audit (0: disconnected, #88),
+        # and the zero currents that leave disconnected loads out of the rail solves.
+        self.load_amps: Dict[str, float] = {l.name: l.total_current() for l in setup.loads}
+        self.disconnected: set = set()
+        self.zeroed: Dict[str, float] = {}
 
         # Per VRM, one entry per phase.
         self.v_out: Dict[str, List[float]] = {}
@@ -250,6 +276,88 @@ class _TreeSolver:
         self.built[g] = (mesh, system)
         return self.built[g]
 
+    def _rail_system(self, g: Group):
+        """The rail's terminals (built once): (rail, loads, mesh, system)."""
+        if g not in self.rail_terms:
+            rail = _Rail(self.driver[g], self.fed_by.get(g, []), self.pads)
+            self.rail_terms[g] = (rail, self._setup_loads_in(g) + rail.terminal_loads())
+        rail, loads = self.rail_terms[g]
+        vrm = self.driver[g]
+        mesh, system = self._system_for(
+            g, [VoltageSource(vrm.name, rail.phase_pads[0], vrm.voltage)], loads,
+            self.label_of(g))
+        return rail, loads, mesh, system
+
+    def _ground_system(self, g: Group):
+        """The ground's reference VRMs and its (mesh, system)."""
+        refs = [v for v in self.setup.vrms
+                if v.kind == "source" and v.ground and v.ground.net in g]
+        sources = [VoltageSource(f"{v.name} (gnd)", self.pads(v.ground), 0.0) for v in refs]
+        loads = [CurrentLoad(f"{l.name} (return)", self.pads(l.ground), -l.total_current(),
+                             optional=True)
+                 for l in self.setup.loads if l.ground and l.ground.net in g]
+        loads += self._vrm_ground_loads(g)
+        return refs, self._system_for(g, sources, loads, self.label_of(g))
+
+    # ------------------------------------------------------------ connection audit
+    def _pins(self, pad_ids) -> str:
+        return ", ".join(sorted((self.pad_number.get(p, p) for p in pad_ids),
+                                key=lambda n: (len(n), n)))
+
+    def _audit(self) -> List[str]:
+        """Mesh every group and find the load pins with no path through copper or series
+        links to their VRM or ground reference (#88). Returns a note per load with any."""
+        dead: Dict[str, set] = {}
+        for g in self.order:
+            for name, pads in self._rail_system(g)[3].dead_pads.items():
+                dead.setdefault(name, set()).update(pads)
+        for g in self.ground_groups:
+            for name, pads in self._ground_system(g)[1][1].dead_pads.items():
+                dead.setdefault(name, set()).update(pads)
+        notes = []
+        for l in self.setup.loads:
+            vrm = self.driver[self.groups[l.supply.net]]
+            s_dead = set().union(*(dead.get(n, set()) for n in _load_names(l)))
+            g_dead = dead.get(f"{l.name} (return)", set())
+            if not s_dead and not g_dead:
+                continue
+            g_pads = self.pads(l.ground) if l.ground else []
+            off = (s_dead >= set(self._supply_pads(l))
+                   or bool(g_pads) and g_dead >= set(g_pads))
+            parts = []
+            if s_dead:
+                parts.append(f"supply pin(s) {l.supply.ref} {self._pins(s_dead)} on "
+                             f"{l.supply.net} have no copper or series-link path to {vrm.name}")
+            if g_dead:
+                parts.append(f"ground pin(s) {l.ground.ref} {self._pins(g_dead)} on "
+                             f"{l.ground.net} have no copper or series-link path to the "
+                             "ground reference")
+            if off:
+                self.disconnected.add(l.name)
+                amps, self.load_amps[l.name] = self.load_amps[l.name], 0.0
+                self.zeroed.update({n: 0.0 for n in _load_names(l)})
+                notes.append(f"Load {l.name}: {'; '.join(parts)}. Its {amps:.4g} A is left out "
+                             f"of the solve and it shows as {DISCONNECTED}.")
+                continue
+            if l.groups:                 # a pin group with no pin connected draws nothing
+                self.load_amps[l.name] = sum(
+                    grp.current for i, grp in enumerate(l.groups)
+                    if not dead.get(_group_load_name(l, i), set()) >= set(
+                        self.pads(PinRef(l.supply.ref, l.supply.net, list(grp.pins)))))
+            notes.append(f"Load {l.name}: {'; '.join(parts)}. Its current is drawn through "
+                         "its other pins.")
+        for g in self.order:
+            users = [l.name for l in self.setup.loads if self.groups[l.supply.net] == g]
+            if users and not self.fed_by.get(g) and set(users) <= self.disconnected:
+                raise SolveError(
+                    f"{self.label_of(g)}: no load on this rail is connected to "
+                    f"{self.driver[g].name} through copper or series links "
+                    f"({', '.join(users)}). If KiCad shows them connected, the link is "
+                    "probably still unrouted (ratsnest) or goes through an unfilled zone; "
+                    "refill zones and reload. Parts that join nets must be added as DC "
+                    "connections.")
+        return notes
+
     # ------------------------------------------------------------ rails
     def _setup_loads_in(self, g: Group) -> List[CurrentLoad]:
         loads = []
@@ -257,11 +365,13 @@ class _TreeSolver:
             if l.supply.net not in g:
                 continue
             if not l.groups:
-                loads.append(CurrentLoad(l.name, self.pads(l.supply), l.current))
+                loads.append(CurrentLoad(l.name, self.pads(l.supply), l.current,
+                                         optional=True))
                 continue
             for i, grp in enumerate(l.groups):
                 ref = PinRef(l.supply.ref, l.supply.net, list(grp.pins))
-                loads.append(CurrentLoad(_group_load_name(l, i), self.pads(ref), grp.current))
+                loads.append(CurrentLoad(_group_load_name(l, i), self.pads(ref), grp.current,
+                                         optional=True))
         return loads
 
     def _child_currents(self, rail: _Rail, vin_est: Dict[str, List[float]]) -> Dict[str, float]:
@@ -289,6 +399,7 @@ class _TreeSolver:
         for it in range(1, MAX_TREE_ITERATIONS + 1):  # noqa: B007 - reported after
             currents = self._child_currents(rail, vin_est)
             total = demand + sum(currents.values())
+            currents.update(self.zeroed)       # disconnected loads draw nothing (#88)
             for name in rail.phase_load:
                 currents[name] = -total / rail.n_phases
             sol = system.solve({vrm.name: v_src}, currents, progress=NULL)
@@ -319,12 +430,9 @@ class _TreeSolver:
         label = self.label_of(g)
         self.progress.stage(f"Rail {index + 1}/{len(self.order)}: {label} "
                             f"(from {vrm.name}){suffix}")
-        rail = _Rail(vrm, self.fed_by.get(g, []), self.pads)
-        loads = self._setup_loads_in(g)
-        demand = sum(ld.current for ld in loads)     # fixed loads; the rest vary
-        loads += rail.terminal_loads()
-        mesh, system = self._system_for(
-            g, [VoltageSource(vrm.name, rail.phase_pads[0], vrm.voltage)], loads, label)
+        rail, _, mesh, system = self._rail_system(g)
+        demand = sum(self.load_amps[l.name] for l in self.setup.loads     # fixed loads;
+                     if self.groups[l.supply.net] == g)                    # the rest vary
 
         sol, v_src, vin, currents, it = self._iterate_rail(rail, system, demand, label,
                                                            warnings)
@@ -344,34 +452,37 @@ class _TreeSolver:
         return (label, sorted(g), "rail", vrm.name, mesh, sol, it)
 
     # ------------------------------------------------------------ grounds
-    def _vrm_ground_returns(self, g: Group, loads: List[CurrentLoad]) -> Dict[str, float]:
+    def _vrm_ground_phases(self, g: Group) -> Iterator[Tuple[Vrm, int, object]]:
+        """(VRM, 0-based phase, phase) for every non-reference VRM phase grounded in g."""
+        for v in self.setup.vrms:
+            for k, ph in enumerate(v.all_phases() if v.ground and v.ground.net in g else []):
+                if not (v.kind == "source" and k == 0):      # not the 0 V reference
+                    yield v, k, ph
+
+    def _vrm_ground_loads(self, g: Group) -> List[CurrentLoad]:
+        loads = [CurrentLoad(_term(v, "gnd", k + 1), self.pads(ph.ground), 0.0)
+                 for v, k, ph in self._vrm_ground_phases(g)]
+        loads += [CurrentLoad(f"{v.name} (gnd sense)", self.pads(v.ground_sense), 0.0)
+                  for v in self.setup.vrms if v.ground_sense and v.ground_sense.net in g]
+        return loads
+
+    def _vrm_ground_returns(self, g: Group) -> Dict[str, float]:
         """Every non-reference VRM phase returns its output current and sends its input
         current back to its own source; ground sense pins are probed, drawing nothing."""
         currents = {}
-        for v in self.setup.vrms:
-            for k, ph in enumerate(v.all_phases() if v.ground and v.ground.net in g else []):
-                if v.kind == "source" and k == 0:
-                    continue                  # the 0 V reference
-                name = _term(v, "gnd", k + 1)
-                i_back = self.i_in[v.name][k] if v.name in self.i_in else 0.0
-                currents[name] = self.i_out[v.name][k] - i_back
-                loads.append(CurrentLoad(name, self.pads(ph.ground), 0.0))
-            if v.ground_sense and v.ground_sense.net in g:
-                loads.append(CurrentLoad(f"{v.name} (gnd sense)", self.pads(v.ground_sense),
-                                         0.0))
+        for v, k, _ in self._vrm_ground_phases(g):
+            i_back = self.i_in[v.name][k] if v.name in self.i_in else 0.0
+            currents[_term(v, "gnd", k + 1)] = self.i_out[v.name][k] - i_back
         return currents
 
     def _solve_ground(self, g: Group, suffix: str, warnings: List[str]):
         self.progress.check_cancel()
         label = self.label_of(g)
         self.progress.stage(f"Ground: {label}{suffix}")
-        refs = [v for v in self.setup.vrms
-                if v.kind == "source" and v.ground and v.ground.net in g]
-        sources = [VoltageSource(f"{v.name} (gnd)", self.pads(v.ground), 0.0) for v in refs]
-        loads = [CurrentLoad(f"{l.name} (return)", self.pads(l.ground), -l.total_current())
-                 for l in self.setup.loads if l.ground and l.ground.net in g]
-        currents = self._vrm_ground_returns(g, loads)
-        mesh, system = self._system_for(g, sources, loads, label)
+        refs, (mesh, system) = self._ground_system(g)
+        currents = self._vrm_ground_returns(g)
+        currents.update({f"{l.name} (return)": -self.load_amps[l.name]
+                         for l in self.setup.loads if l.ground and l.ground.net in g})
         sol = system.solve(currents=currents, progress=NULL)
         warnings.extend(f"{label}: {w}" for w in sol.warnings)
         self.ground_solutions[g] = sol
@@ -391,7 +502,9 @@ class _TreeSolver:
     # ------------------------------------------------------------ run
     def run(self) -> TreeResult:
         t0 = time.perf_counter()
-        out = TreeResult(warnings=list(self.notes))
+        with self.progress.timed("Checking load connections"):
+            audit = self._audit()
+        out = TreeResult(warnings=list(self.notes) + audit)
         for tree_pass in range(1, MAX_TREE_ITERATIONS + 1):
             warnings: List[str] = []
             self.not_converged = set()
@@ -466,20 +579,25 @@ class _TreeSolver:
     def _load_report(self, l: Load, out_of_reg: set) -> LoadReport:
         g = self.groups[l.supply.net]
         sol = self.rail_solutions[g]
-        sv = _pad_voltages(sol, self._supply_pads(l))
+        nominal = self.driver[g].voltage
+        if l.name in self.disconnected:
+            nan = math.nan
+            return LoadReport(l.name, self.label_of(g), 0.0, nominal, nan, nan,
+                              nan if l.ground else None, nan, nan, l.tolerance_pct, None, nan,
+                              [], None, None, status=DISCONNECTED)
+        sv = _connected(_pad_voltages(sol, self._supply_pads(l)))
         gv = None
         if l.ground:
-            gv = _pad_voltages(self.ground_solutions[self.groups[l.ground.net]],
-                               self.pads(l.ground))
+            gv = _connected(_pad_voltages(self.ground_solutions[self.groups[l.ground.net]],
+                                          self.pads(l.ground)))
         g_mean = 0.0 if gv is None else float(gv.mean())
         g_lo = 0.0 if gv is None else float(gv.min())
         g_hi = 0.0 if gv is None else float(gv.max())
-        nominal = self.driver[g].voltage
         low, high = float(sv.min()) - g_hi, float(sv.max()) - g_lo
         # The worst pin is the one furthest from nominal, below (drop) or above (boost).
         worst = low if nominal - low >= high - nominal else high
         eff = float(sv.mean()) - g_mean
-        rep = LoadReport(l.name, self.label_of(g), l.total_current(), nominal,
+        rep = LoadReport(l.name, self.label_of(g), self.load_amps[l.name], nominal,
                          float(sv.mean()), float(sv.min()),
                          None if gv is None else g_mean, eff, nominal - eff,
                          l.tolerance_pct, None, worst, self._pin_group_rows(l, sol), low, high)
@@ -494,9 +612,13 @@ class _TreeSolver:
     def _pin_group_rows(self, l: Load, sol) -> List[tuple]:
         rows = []
         for grp in l.groups:
-            v = _pad_voltages(sol, self.pads(PinRef(l.supply.ref, l.supply.net, list(grp.pins))))
-            rows.append((grp.name or ",".join(grp.pins), grp.current, float(v.mean()),
-                         float(v.min()), float(v.max())))
+            v = _connected(_pad_voltages(
+                sol, self.pads(PinRef(l.supply.ref, l.supply.net, list(grp.pins)))))
+            name = grp.name or ",".join(grp.pins)
+            if not len(v):                 # no pin of the group connected (#88)
+                rows.append((name, 0.0, math.nan, math.nan, math.nan))
+                continue
+            rows.append((name, grp.current, float(v.mean()), float(v.min()), float(v.max())))
         return rows
 
     def _vrm_report(self, v: Vrm, regulation: str) -> VrmReport:

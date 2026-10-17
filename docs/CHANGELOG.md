@@ -87,6 +87,12 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   give it: a default stackup, a 2-layer guess from a KiCad too old to list its layers, or
   pads kept on every layer when KiCad cannot say which layers plated pads are on. Snapshots
   keep both; older snapshots read as coming from KiCad.
+- Loads not connected by copper (#88). Before a DC solve, KiPI checks each load pin for a path
+  to its VRM (or ground reference) through copper or series links, instead of stopping at
+  the first one without. Unconnected pins draw nothing and the load's current goes through
+  its other pins; a load with no supply pin, or no ground pin, connected is left out of the
+  solve and shows as **DISCONNECTED**. The Notes tab lists every unconnected pin. A rail
+  with no load connected at all still stops the solve.
 - The Target Impedance/Frequency Calculator has a **Copy tolerance from DC load** button. It
   fills the AC voltage tolerance from a DC load on the probe's rail: ± its tolerance % of the
   voltage of the VRM feeding it (#87).

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -9,6 +10,7 @@ from kipi.dc.solver import NetResult
 
 NOT_CONVERGED = "NOT CONVERGED"
 OUT_OF_REGULATION = "VRM OUT OF REGULATION"
+DISCONNECTED = "DISCONNECTED"       # no copper path to its VRM: not solved (#88)
 
 
 @dataclass
@@ -31,13 +33,15 @@ def drop_or_boost(dv: float):
     A load can sit above its VRM's set point: a remote-sensed VRM raises its output pins
     to hold a sense point further down the copper, so pins nearer the VRM see a boost.
     """
+    if math.isnan(dv):                 # nothing solved, as for a disconnected load (#88)
+        return dv, ""
     return (-dv, "boost") if dv < -BOOST_EPS else (max(dv, 0.0), "drop")
 
 
 def fmt_drop(dv: float, fmt: str = ".3f", scale: float = 1e3, unit: str = " mV") -> str:
     """``dv`` (volts, nominal - actual) as e.g. "1.234 mV drop" or "0.567 mV boost"."""
     mag, kind = drop_or_boost(dv)
-    return f"{mag * scale:{fmt}}{unit} {kind}"
+    return f"{mag * scale:{fmt}}{unit} {kind}" if kind else ""
 
 
 @dataclass

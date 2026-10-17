@@ -1664,11 +1664,13 @@ class PIPanel(QWidget):
         t.setRowCount(len(tree.loads))
         for r, l in enumerate(tree.loads):
             status = l.verdict
+            v_eff = "" if math.isnan(l.v_effective) else f"{l.v_effective:.5f}"
             # Drop and boost sort as one signed value: largest boost ... largest drop.
-            set_row(t, r, [l.name, l.group, f"{l.current:.4g}", f"{l.v_effective:.5f}",
+            set_row(t, r, [l.name, l.group, f"{l.current:.4g}", v_eff,
                            (fmt_drop(l.drop, unit=""), l.drop * 1e3),
                            (fmt_drop(l.drop_worst, unit=""), l.drop_worst * 1e3),
-                           (f"{abs(l.drop_worst_pct):.3f}", l.drop_worst_pct),
+                           ("" if math.isnan(l.drop_worst_pct)
+                            else f"{abs(l.drop_worst_pct):.3f}", l.drop_worst_pct),
                            "" if l.tolerance_pct is None else f"±{l.tolerance_pct:g}", status])
             color = (("#ffb040" if l.status else None) if l.passed is None
                      else ("#60d060" if l.passed else "#ff6060"))
@@ -1718,6 +1720,10 @@ class PIPanel(QWidget):
             if l.pin_groups:
                 notes.append(f"<b>{html.escape(l.name)}</b> pin groups:")
                 for name, amps, vmean, vmin, vmax in l.pin_groups:
+                    if math.isnan(vmean):
+                        notes.append(f"&nbsp;&nbsp;{html.escape(name)}: not connected, "
+                                     "draws nothing")
+                        continue
                     span = (f"lowest pin {vmin:.5f} V" if vmax is None
                             else f"pins {vmin:.5f} to {vmax:.5f} V")
                     notes.append(f"&nbsp;&nbsp;{html.escape(name)}: {amps:.4g} A, "
