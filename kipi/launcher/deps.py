@@ -20,13 +20,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
-from kipi.launcher.system import no_window
+from kipi.launcher.system import child_kwargs
 
 PARDISO = "pypardiso"
 MANIFEST = Path(__file__).with_name("deps_manifest.json")
 # Installed size over download size, for the "on disk" estimate: wheels are compressed.
-# Measured on a Windows install of KiPI 0.8.0 (see .github/scripts/dep_sizes.py).
-INSTALLED_PER_DOWNLOAD = 3.4
+# Measured: KiPI 0.8.0's Windows environment is 810 MB from 254 MB of downloads.
+INSTALLED_PER_DOWNLOAD = 3.2
 
 
 class ResolveError(RuntimeError):
@@ -103,7 +103,7 @@ def resolve(python: Sequence[str], requirements: Path, extra: Sequence[str] = ()
                "-r", str(requirements), *extra, *pip_args]
         try:
             out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                                 **no_window())
+                                 **child_kwargs())
         except (OSError, subprocess.SubprocessError) as e:
             raise ResolveError(f"could not run pip: {e}") from e
         if out.returncode != 0 or not report.is_file():

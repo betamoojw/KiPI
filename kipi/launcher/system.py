@@ -64,7 +64,7 @@ def probe(command: Sequence[str], timeout: float = 20.0) -> Optional[Python]:
     import json
     try:
         out = subprocess.run(list(command) + ["-c", _PROBE], capture_output=True, text=True,
-                             timeout=timeout, **no_window())
+                             timeout=timeout, **child_kwargs())
         exe, version, ok = json.loads(out.stdout.strip().splitlines()[-1])
         return Python(exe, tuple(version), bool(ok))
     except (OSError, subprocess.SubprocessError, ValueError, IndexError):
@@ -94,7 +94,7 @@ def _uv_python(uv: str, minor: int) -> Optional[str]:
     try:
         # --system: never a virtual environment that happens to be near the current folder
         out = subprocess.run([uv, "python", "find", "--system", f"3.{minor}"],
-                             capture_output=True, text=True, timeout=20, **no_window())
+                             capture_output=True, text=True, timeout=20, **child_kwargs())
     except (OSError, subprocess.SubprocessError):
         return None
     path = out.stdout.strip()
@@ -123,11 +123,14 @@ def find_python(commands: Optional[List[List[str]]] = None,
     return None, problems
 
 
-def no_window() -> dict:
-    """Keep a console window from flashing up for each child process (Windows)."""
+def child_kwargs() -> dict:
+    """For every process the launcher starts: no stdin (started with no console, as
+    kipi_launcher.pyw is, there is none to inherit, and Windows refuses to start a child
+    that inherits an invalid handle), and no console window flashing up (Windows)."""
+    kwargs = {"stdin": subprocess.DEVNULL}
     if sys.platform == "win32":
-        return {"creationflags": 0x08000000}    # CREATE_NO_WINDOW
-    return {}
+        kwargs["creationflags"] = 0x08000000    # CREATE_NO_WINDOW
+    return kwargs
 
 
 def can_show_windows() -> bool:

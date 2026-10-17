@@ -27,6 +27,14 @@ def main(argv=None) -> int:
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args(argv)
     path = args.board or args.snapshot
+    missing = missing_packages()
+    if missing:
+        print(f"This Python ({sys.executable}) does not have KiPI's packages "
+              f"({', '.join(missing)} are missing).\n\nStart KiPI with kipi_launcher.py "
+              "instead: it installs them into an environment of its own the first time.\n"
+              f"    python \"{Path(__file__).resolve().parents[1] / 'kipi_launcher.py'}\"",
+              file=sys.stderr)
+        return 2
 
     from kipi.gui.app import setup_logging
     setup_logging(logging.DEBUG if args.debug else logging.INFO)
@@ -72,6 +80,17 @@ def main(argv=None) -> int:
         return _run_live(instance)
     finally:
         instance.release()
+
+
+# The modules of requirements-standalone.txt, by the name they are imported under.
+_MODULES = ("qtpy", "PySide6", "pyvista", "pyvistaqt", "numpy", "shapely", "scipy",
+            "triangle", "pyamg", "plotly", "matplotlib")
+
+
+def missing_packages():
+    """KiPI's packages this Python cannot import, without importing any of them."""
+    import importlib.util
+    return [m for m in _MODULES if importlib.util.find_spec(m) is None]
 
 
 def _open(path):

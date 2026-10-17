@@ -40,3 +40,16 @@ def test_dev_tools_match():
 def test_the_launcher_installs_what_standalone_needs():
     standalone = {d.replace(" ", "") for d in _pyproject()["dependencies"]}
     assert _requirements(ROOT / "requirements-standalone.txt") == standalone
+
+
+def test_python_m_kipi_checks_every_standalone_package():
+    """kipi/__main__.py names the module each requirement is imported under."""
+    from kipi.__main__ import _MODULES
+    import_names = {"pyside6-essentials": "pyside6"}
+    wanted = set()
+    for line in _requirements(ROOT / "requirements-standalone.txt"):
+        name = line
+        for sep in "<>=!~;[":
+            name = name.split(sep, 1)[0]
+        wanted.add(import_names.get(name.lower(), name.lower()))
+    assert {m.lower() for m in _MODULES} == wanted

@@ -123,6 +123,7 @@ def test_the_launcher_needs_only_the_standard_library():
         if not (rel.startswith("kipi/launcher/") or rel == "kipi/__init__.py"):
             return False
         top = module.split(".")[0]
+        # kipi_entry: started by KiCad as its plugin, the launcher hands over to it.
         return not (top in stdlib or module == "kipi" or _under(module, "kipi.launcher")
-                    or module in ("kipi.__version__", "__future__.annotations"))
+                    or module in ("kipi.__version__", "kipi_entry"))
     assert _violations(rule) == []

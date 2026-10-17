@@ -1,0 +1,120 @@
+"""Making KiPI's environment and installing packages into it.
+
+uv makes both much faster, so it is used when it is on the PATH; otherwise, or when uv
+fails, the standard ``venv`` module and pip do the same. Each command's output goes to
+``on_line`` as it comes, and :meth:`Installer.cancel` stops the one running.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import threading
+from pathlib import Path
+from typing import Callable, List, Optional, Sequence
+
+from kipi.launcher.paths import env_python
+from kipi.launcher.system import Python, child_kwargs
+
+#: Everything PARDISO brings with it, for when it is removed and no live list is known.
+PARDISO_PACKAGES = ["pypardiso", "mkl", "intel-openmp", "onemkl-license", "tbb",
+                    "intel-cmplr-lib-ur", "tcmlib", "umf"]
+
+
+class InstallError(RuntimeError):
+    pass
+
+
+class Canceled(Exception):
+    pass
+
+
+class Installer:
+    def __init__(self, python: Python, env: Path, on_line: Callable[[str], None],
+                 uv: Optional[str] = None):
+        """``uv`` is the uv program to use, or None for venv and pip."""
+        self.python = python
+        self.env = env
+        self.on_line = on_line
+        self.uv = uv
+        self._proc: Optional[subprocess.Popen] = None
+        self._canceled = threading.Event()
+
+    @property
+    def tool(self) -> str:
+        return "uv" if self.uv else "pip"
+
+    # --- commands ---------------------------------------------------------------------
+    def create_env(self) -> None:
+        if self.uv:
+            self._run([self.uv, "venv", "--python", self.python.executable, str(self.env)])
+        else:
+            self._run([self.python.executable, "-m", "venv", str(self.env)])
+        if not env_python(self.env).is_file():
+            raise InstallError(f"the environment was made but has no Python: {self.env}")
+
+    def install(self, requirements: Optional[Path] = None, packages: Sequence[str] = ()) -> None:
+        args = (["-r", str(requirements)] if requirements else []) + list(packages)
+        if self.uv:
+            self._run([self.uv, "pip", "install", "--python", str(env_python(self.env)), *args])
+        else:
+            self._run([str(env_python(self.env)), "-m", "pip", "install",
+                       "--disable-pip-version-check", *args])
+
+    def uninstall(self, packages: Sequence[str]) -> None:
+        if self.uv:
+            self._run([self.uv, "pip", "uninstall", "--python", str(env_python(self.env)),
+                       *packages])
+        else:
+            self._run([str(env_python(self.env)), "-m", "pip", "uninstall", "-y",
+                       "--disable-pip-version-check", *packages])
+
+    # --- running ----------------------------------------------------------------------
+    def cancel(self) -> None:
+        self._canceled.set()
+        proc = self._proc
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+
+    def _run(self, cmd: List[str]) -> None:
+        if self._canceled.is_set():
+            raise Canceled()
+        self.on_line("$ " + " ".join(f'"{c}"' if " " in c else c for c in cmd))
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True, errors="replace", bufsize=1, **child_kwargs())
+        except OSError as e:
+            raise InstallError(f"could not run {cmd[0]}: {e}") from e
+        self._proc = proc
+        tail: List[str] = []
+        try:
+            for line in proc.stdout:
+                line = line.rstrip()
+                if line:
+                    self.on_line(line)
+                    tail = (tail + [line])[-8:]
+            proc.wait()
+        finally:
+            self._proc = None
+        if self._canceled.is_set():
+            raise Canceled()
+        if proc.returncode != 0:
+            raise InstallError(f"{Path(cmd[0]).name} failed (exit {proc.returncode}): "
+                               + " | ".join(tail[-3:]))
+
+
+def find_uv() -> Optional[str]:
+    return shutil.which("uv")
+
+
+def remove_env(env: Path, data: Path) -> None:
+    """Delete KiPI's environment, and nothing else: only a folder named ``venv`` directly
+    in the launcher's data folder that is a virtual environment (or empty)."""
+    env, data = env.resolve(), data.resolve()
+    if not env.exists():
+        return
+    if env.parent != data or env.name != "venv":
+        raise InstallError(f"refusing to delete {env}: not KiPI's environment")
+    if any(env.iterdir()) and not (env / "pyvenv.cfg").is_file():
+        raise InstallError(f"refusing to delete {env}: not a virtual environment")
+    shutil.rmtree(env)
