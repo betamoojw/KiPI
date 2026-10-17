@@ -101,11 +101,17 @@ class _MessageBoxUI:
     def install(self, task):
         return task(lambda line: None, lambda f: None, lambda inst: None)
 
+    def status(self, text: str) -> None:
+        pass
+
     def info(self, text: str) -> None:
         pass
 
     def error(self, text: str) -> None:
         self._box("KiPI could not start: " + text)
+
+    def close(self) -> None:
+        pass
 
 
 def choose_python(env: Path, fresh: bool):
@@ -164,7 +170,7 @@ def main(argv: Optional[List[str]] = None, windowed: bool = False) -> int:
                      f"none was found.{' Found:' + found if found else ''}\n\nInstall one "
                      "(for example from python.org) and start KiPI again.")
             return 2
-        ui.info("Checking which packages KiPI needs...")
+        ui.status("Checking which packages KiPI needs...")
         plan = deps.make_plan([python.executable], req, pardiso_ok)
         log.write(f"Plan ({plan.source or 'names only'}): "
                   + ", ".join(f"{p.name} {p.version}" for p in plan.packages))
@@ -190,6 +196,7 @@ def main(argv: Optional[List[str]] = None, windowed: bool = False) -> int:
             log.write(f"Failed: {e}")
             ui.error(f"{e}\n\nEverything the installer printed is in {log.path}")
             return 1
+    ui.close()
     if args.no_launch:
         return 0
     return launch(env, args.board, windowed)

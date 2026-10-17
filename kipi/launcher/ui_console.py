@@ -76,8 +76,16 @@ class ConsoleUI:
                 inst.cancel()
             raise Canceled() from None
 
-    def info(self, text: str) -> None:
+    def status(self, text: str) -> None:
+        """What the launcher is doing now (a step that takes a moment)."""
         self.write(text)
+
+    def info(self, text: str) -> None:
+        """A message the user should read before going on."""
+        self.write(text)
+
+    def close(self) -> None:
+        pass
 
     def error(self, text: str) -> None:
         self.write("")
