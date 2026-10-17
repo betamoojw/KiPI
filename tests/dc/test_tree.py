@@ -109,15 +109,47 @@ def test_validation_rules():
     assert any("ground sense pins must be on" in e for e in validate(s))
 
 
-def test_setup_json_round_trip(tmp_path):
+def test_setup_file_round_trip(tmp_path):
     s = setup(kind="smps", eff=0.85, sense=True, ground=True, gsense=True)
     s.links.append(DcLink("FB1", PinRef("U2", "+3V3", ["1"]), PinRef("U2", "+3V3", ["1"]), 0.05))
     from kipi.dc.pi.model import PinGroup
     s.loads[0].groups = [PinGroup(["1"], 0.4, "a")]
     s.settings.rho_by_layer = {"In1.Cu": 1.9e-5}
     s.settings.tcr_per_c = 0.0038
-    back = PISetup.load(s.save(tmp_path / "x.kipi-setup.json"))
-    assert back == s
+    path = s.save(tmp_path / "x.kipi-setup.json")
+    assert path.name == "x.kipi-setup.yml"           # YAML only from 0.8.0 (#76)
+    assert PISetup.load(path) == s
+
+
+def test_legacy_json_setups_still_load(tmp_path):
+    import json
+    s = setup(kind="smps", eff=0.85, sense=True, ground=True)
+    legacy = tmp_path / "x.kipi-setup.json"
+    legacy.write_text(json.dumps(s.to_dict(), indent=2), encoding="utf-8")
+    assert PISetup.load(legacy) == s
+    from kipi.dc.pi.model import find_setup
+    assert find_setup("x.kicad_pcb", str(tmp_path)) == legacy
+    s.save(legacy)
+    assert find_setup("x.kicad_pcb", str(tmp_path)) == tmp_path / "x.kipi-setup.yml"
+
+
+def test_hand_edited_yaml_reads_numbers_as_numbers(tmp_path):
+    from kipi.core import yaml_io
+    d = yaml_io.loads("a: 1e-9\nb: 2.5E+3\nc: 3\nd: '1e-9'\ne: .5\nf: 1_000.5\n")
+    assert d == {"a": 1e-9, "b": 2500.0, "c": 3, "d": "1e-9", "e": 0.5, "f": 1000.5}
+
+
+def test_without_pyyaml_setups_stay_json(tmp_path, monkeypatch):
+    from kipi.core import yaml_io
+    from kipi.dc.pi.model import setup_path
+    monkeypatch.setattr(yaml_io, "yaml", None)
+    s = setup()
+    assert setup_path("x.kicad_pcb", str(tmp_path)).name == "x.kipi-setup.json"
+    path = s.save(tmp_path / "x.kipi-setup.yml")
+    assert path.name == "x.kipi-setup.json" and PISetup.load(path) == s
+    (tmp_path / "y.kipi-setup.yml").write_text("nets: []\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="PyYAML"):
+        PISetup.load(tmp_path / "y.kipi-setup.yml")
 
 
 def test_resistivity_must_be_positive():

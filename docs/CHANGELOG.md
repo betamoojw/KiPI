@@ -132,6 +132,12 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
 - The standalone launcher installs KiPI's packages with uv even when uv is not on the PATH
   (#113). It uses uvx or pipx to fetch uv, and falls back to venv and pip as before when
   none of them is available. The setup log names the route taken, for example *uv (pipx)*.
+- Setups are saved as YAML, `<board>.kipi-setup.yml`, which is easier to read, diff and
+  edit by hand (#76). A `.kipi-setup.json` from an earlier KiPI still opens when there is no
+  `.yml` setup, with a log warning that JSON setups are deprecated and will stop being
+  read in a future version. The next save writes the `.yml` file and leaves the JSON file
+  as it was. KiPI now needs PyYAML. In an environment that does not have it yet, setups
+  stay JSON. The example and validation setups are now YAML.
 
 ### Internal
 - Board sources are kept apart from the rest of KiPI. `kipi/sources/` holds where boards

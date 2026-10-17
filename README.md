@@ -377,9 +377,11 @@ the board and the warmer copper become more resistive. Set:
   either limit, on any layer, is marked FAIL in the Thermal results tab. Changing them grades
   the last solve straight away.
 
-The setup is saved as `<board>.kipi-setup.json` next to the board when you click **Save** at
-the top of the panel and every time you solve. It travels with the project and can go into
-version control. AI Agents can make quick work of power tree modelling by editing this file directly if they have knowledge of the file format from this codebase as well as the components in your design from your schematic.
+The setup is saved as `<board>.kipi-setup.yml` (YAML) next to the board when you click
+**Save** at the top of the panel and every time you solve. It travels with the project and
+can go into version control. Setups saved as `<board>.kipi-setup.json` by earlier KiPI
+versions still open, with a warning that JSON setups are deprecated; the next save writes
+the `.yml` file, which is read from then on. AI Agents can make quick work of power tree modelling by editing this file directly if they have knowledge of the file format from this codebase as well as the components in your design from your schematic.
 
 **Data Prepoulation**: As you pick pins when setting up the power tree, KiPI pre-fills the fields that usually follow from those selections. Every prepopulation can be changed, and a field the extracted board gives no answer for is left as it was:
 

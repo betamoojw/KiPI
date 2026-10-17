@@ -1,8 +1,8 @@
 {
  "kipi": "0.8.0",
- "generated": "2026-10-16",
+ "generated": "2026-10-17",
  "python": "3.12",
- "requirements_hash": "db9d86c87fdc79d7",
+ "requirements_hash": "3a0684cce4977d68",
  "platforms": {
   "win_amd64": {
    "packages": [
@@ -75,6 +75,11 @@
      "matplotlib",
      "3.11.2",
      9349409
+    ],
+    [
+     "PyYAML",
+     "6.0.3",
+     154003
     ],
     [
      "contourpy",
@@ -328,6 +333,11 @@
      9860353
     ],
     [
+     "PyYAML",
+     "6.0.3",
+     807870
+    ],
+    [
      "contourpy",
      "1.4.0",
      383243
@@ -574,6 +584,11 @@
      9305583
     ],
     [
+     "PyYAML",
+     "6.0.3",
+     173973
+    ],
+    [
      "contourpy",
      "1.4.0",
      284921
@@ -782,6 +797,11 @@
      "matplotlib",
      "3.11.2",
      9476466
+    ],
+    [
+     "PyYAML",
+     "6.0.3",
+     182063
     ],
     [
      "contourpy",

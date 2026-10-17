@@ -177,7 +177,7 @@ def test_example_board_solves():
     from kipi.core.model.snapshot_io import load
     folder = EXAMPLE
     snap = load(folder / "multiphase_buck.kipi.json.gz")
-    s = PISetup.load(folder / "multiphase_buck.kipi-setup.json")
+    s = PISetup.load(folder / "multiphase_buck.kipi-setup.yml")
     tree = solve_tree(snap, s)
     u1, ld = by_name(tree.vrms, "U1"), by_name(tree.loads, "U10")
     assert [p.i_out for p in u1.phases] == pytest.approx([10.0] * 4, rel=1e-9)

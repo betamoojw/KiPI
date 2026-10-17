@@ -252,7 +252,7 @@ results as an engineering estimate and sanity-check anything surprising.</div>
     view to probe voltages. Switch the field to <b>Current density</b> and tick
     <b>Arrows</b> to find bottlenecks.</li>
 </ol>
-<p>The setup is saved next to your board as <code>&lt;board&gt;.kipi-setup.json</code> every
+<p>The setup is saved next to your board as <code>&lt;board&gt;.kipi-setup.yml</code> every
 time you solve, so the next session starts where you left off.</p>
 </div>
 </details>
@@ -1490,7 +1490,7 @@ them a model or confirm they really do not belong on this rail.</p>
   <li><b>Save snapshot…</b> stores the board; anyone with KiPI can open it with <b>Open
     snapshot…</b>, or with <b>Open…</b> in standalone KiPI, without KiCad or your design
     files.</li>
-  <li>Keep <code>&lt;board&gt;.kipi-setup.json</code> in version control next to the board.</li>
+  <li>Keep <code>&lt;board&gt;.kipi-setup.yml</code> in version control next to the board.</li>
   <li>Tick <b>HTML report</b> for a single file you can email: it needs nothing but a
     browser.</li>
   <li><b>Export ▾ → Save results…</b> (DC) or <b>Save results…</b> (AC) lets you reopen a
@@ -1506,9 +1506,13 @@ them a model or confirm they really do not belong on this rail.</p>
 <div class="body">
 <table>
   <tr><th>File</th><th>What it is</th></tr>
-  <tr><td><code>&lt;board&gt;.kipi-setup.json</code></td><td class="wrap">The setup: ticked nets, VRMs,
+  <tr><td><code>&lt;board&gt;.kipi-setup.yml</code></td><td class="wrap">The setup: ticked nets, VRMs,
     loads, series links, mesh, copper and thermal settings, capacitor models, probes and the
-    sweep. Saved next to the board on <b>Save</b> and on every solve.</td></tr>
+    sweep, in YAML. Saved next to the board on <b>Save</b> and on every solve.</td></tr>
+  <tr><td><code>&lt;board&gt;.kipi-setup.json</code></td><td class="wrap">A setup saved by KiPI
+    before 0.8.0. It still opens, with a warning, when there is no <code>.yml</code> setup;
+    the next save writes the <code>.yml</code> and leaves the JSON file alone. JSON setups
+    are deprecated: a future KiPI will stop reading them.</td></tr>
   <tr><td><code>*.kipi.json.gz</code></td><td class="wrap">A board snapshot (copper, stackup,
     pads, vias, parts).</td></tr>
   <tr><td><code>*.kipi-results</code></td><td class="wrap">A saved DC solve (Python pickle).</td></tr>

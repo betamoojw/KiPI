@@ -2,7 +2,7 @@
 
     python examples/validation/make_boards.py
 
-writes ``<name>/<name>.kipi.json.gz`` and ``<name>/<name>.kipi-setup.json`` for every board
+writes ``<name>/<name>.kipi.json.gz`` and ``<name>/<name>.kipi-setup.yml`` for every board
 below. ``tests/accuracy`` solves each one and compares the results with the engineering
 formulas they were designed around, so a change that moves the solvers' answers fails CI.
 Open any of them without KiCad:
@@ -447,7 +447,7 @@ BOARDS = {f.__name__: f for f in (skinny_traces, right_angle, layer_change, plan
 def paths(name: str):
     """The snapshot and setup file of board ``name``."""
     d = HERE / name
-    return d / f"{name}.kipi.json.gz", d / f"{name}.kipi-setup.json"
+    return d / f"{name}.kipi.json.gz", d / f"{name}.kipi-setup.yml"
 
 
 def write(name: str):

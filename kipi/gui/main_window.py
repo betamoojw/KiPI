@@ -1075,21 +1075,28 @@ class MainWindow(QMainWindow):
     # ============================================================ solve
     # ------------------------------------------------------------ setup file
     def _load_setup(self, snap):
-        from kipi.dc.pi.model import PISetup, setup_path
+        from kipi.dc.pi.model import PISetup, find_setup, is_yaml, setup_path
         project_dir = snap.project_dir
         if not project_dir and snap.file:
             project_dir = str(Path(snap.file).parent)
         path = setup_path(snap.board_name, project_dir)
+        found = find_setup(snap.board_name, project_dir)
         setup = PISetup()
         label = f"New setup (will be saved as {path.name})"
-        if path.exists():
+        if found is not None:
             try:
-                setup = PISetup.load(path)
-                label = f"Setup: {path}"
-                self.log(f"Loaded PI setup {path}")
+                setup = PISetup.load(found)
+                label = f"Setup: {found}"
+                self.log(f"Loaded PI setup {found}")
+                if not is_yaml(found) and is_yaml(path):
+                    label += f" (saved as {path.name} from now on)"
+                    self.log(f"{found.name} is a JSON setup. JSON setups are deprecated and "
+                             "a future KiPI will stop reading them; saving the setup writes "
+                             f"{path.name}, which is read from then on. The JSON file is "
+                             "left as it is.", logging.WARNING)
             except Exception as e:  # noqa: BLE001 - a bad file must not block the board
-                self.log(f"Could not read {path}: {e}", logging.WARNING)
-                label = f"Could not read {path.name}; starting empty"
+                self.log(f"Could not read {found}: {e}", logging.WARNING)
+                label = f"Could not read {found.name}; starting empty"
         self._setup_path = path
         self.solve_panel.set_board(snap, setup, label)
         self.ac_panel.set_board(snap, setup, label)
@@ -1104,7 +1111,7 @@ class MainWindow(QMainWindow):
         if self.snapshot is not None:   # a checkbox change may not have synced yet
             self.solve_panel.setup.nets = self._checked_nets()
         try:
-            self.solve_panel.setup.save(self._setup_path)
+            self._setup_path = self.solve_panel.setup.save(self._setup_path)
             self.solve_panel.lbl_file.setText(f"Setup: {self._setup_path}")
             self.ac_panel.set_label(f"Setup: {self._setup_path}")
             self.log(f"Saved PI setup to {self._setup_path}")

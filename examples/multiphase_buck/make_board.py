@@ -6,7 +6,7 @@ writes ``multiphase_buck.kipi.json.gz`` next to this script. Open it without KiC
 
     python -m kipi --snapshot examples/multiphase_buck/multiphase_buck.kipi.json.gz
 
-KiPI then loads ``multiphase_buck.kipi-setup.json`` from the same folder.
+KiPI then loads ``multiphase_buck.kipi-setup.yml`` from the same folder.
 
 The board is 60 x 40 mm, four layers (1 oz everywhere):
 
@@ -206,5 +206,5 @@ def make_setup() -> PISetup:
 if __name__ == "__main__":
     out = HERE / "multiphase_buck.kipi.json.gz"
     save(build(), out)
-    make_setup().save(HERE / "multiphase_buck.kipi-setup.json")
-    print(f"Wrote {out} and multiphase_buck.kipi-setup.json")
+    make_setup().save(HERE / "multiphase_buck.kipi-setup.yml")
+    print(f"Wrote {out} and multiphase_buck.kipi-setup.yml")

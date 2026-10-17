@@ -46,6 +46,7 @@ dependencies = [
     "pyamg>=5.0",
     "plotly>=5.20",
     "matplotlib>=3.8",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]

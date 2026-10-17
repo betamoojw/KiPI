@@ -169,7 +169,7 @@ class PISetup:
         out.discard("")
         return out
 
-    # ------------------------------------------------------------------ JSON
+    # ------------------------------------------------------------------ file
     def to_dict(self) -> dict:
         d = dataclasses.asdict(self)
         d.pop("legacy_laminate_k")
@@ -229,19 +229,59 @@ class PISetup:
         )
 
     def save(self, path) -> Path:
+        """Write the setup as YAML, to ``path`` with a ``.yml`` suffix in place of ``.json``
+        (#76); the path written is returned. Only without PyYAML does it stay JSON."""
+        from kipi.core import yaml_io
         path = Path(path)
-        path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        if yaml_io.available():
+            if path.suffix.lower() == ".json":
+                path = path.with_suffix(".yml")
+            path.write_text(yaml_io.dumps(self.to_dict()), encoding="utf-8")
+        else:
+            path = path.with_suffix(".json") if is_yaml(path) else path
+            path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
         return path
 
     @staticmethod
     def load(path) -> "PISetup":
-        return PISetup.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+        """A setup from YAML or, for setups saved before 0.8.0, JSON (deprecated)."""
+        from kipi.core import yaml_io
+        path = Path(path)
+        text = path.read_text(encoding="utf-8")
+        if not is_yaml(path):
+            return PISetup.from_dict(json.loads(text))
+        if not yaml_io.available():
+            raise ValueError("reading a .yml setup needs PyYAML; reinstall KiPI's "
+                             "dependencies")
+        return PISetup.from_dict(yaml_io.loads(text) or {})
+
+
+SETUP_SUFFIX = ".kipi-setup.yml"
+LEGACY_SETUP_SUFFIX = ".kipi-setup.json"       # before 0.8.0; still read (#76)
+
+
+def is_yaml(path) -> bool:
+    return Path(path).suffix.lower() in (".yml", ".yaml")
 
 
 def setup_path(board_file_or_name: str, project_dir: str) -> Path:
-    """Where a board's setup lives: ``<project dir>/<board stem>.kipi-setup.json``."""
+    """Where a board's setup is saved: ``<project dir>/<board stem>.kipi-setup.yml``
+    (``.json`` if PyYAML is missing)."""
+    from kipi.core import yaml_io
     stem = Path(board_file_or_name).stem
-    return Path(project_dir or ".") / f"{stem}.kipi-setup.json"
+    suffix = SETUP_SUFFIX if yaml_io.available() else LEGACY_SETUP_SUFFIX
+    return Path(project_dir or ".") / f"{stem}{suffix}"
+
+
+def find_setup(board_file_or_name: str, project_dir: str) -> Optional[Path]:
+    """The board's saved setup: the YAML one, else one saved as JSON before 0.8.0, else
+    None."""
+    stem = Path(board_file_or_name).stem
+    folder = Path(project_dir or ".")
+    for suffix in (SETUP_SUFFIX, LEGACY_SETUP_SUFFIX):
+        if (folder / f"{stem}{suffix}").is_file():
+            return folder / f"{stem}{suffix}"
+    return None
 
 
 # ---------------------------------------------------------------------------
