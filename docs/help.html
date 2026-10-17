@@ -694,8 +694,14 @@ anything it fills in: your value is kept.</p>
     part's pins on its other rail, if it has exactly one. The VRM's <b>Name</b> follows the
     part while it is still the part's reference.</td></tr>
   <tr><td class="wrap">add phases to a VRM</td><td class="wrap">Each new phase repeats the last
-    one on the next parts in sequence: <code>L1 → L2</code>, <code>Q1 → Q2</code>, with the same
-    pin numbers. Without a next part, the phase copies the last one for you to edit.</td></tr>
+    one on the parts the next phase likely uses, with the same pin numbers:
+    <ul><li>the same parts on the next schematic sheet, when the board is annotated by sheet
+    (<code>L101, Q101, Q102 → L201, Q201, Q202</code>, or <code>×1000</code>). Every one of
+    the phase's parts must be there;</li>
+    <li>otherwise, the same step on as between the last two phases
+    (<code>Q2, Q4 → Q6</code>), or the next parts in sequence (<code>L1 → L2</code>,
+    <code>Q1 → Q2</code>).</li></ul>
+    Without a next part, the phase copies the last one for you to edit.</td></tr>
   <tr><td class="wrap">pick a load's supply pins</td><td class="wrap"><b>Ground pins</b>: the
     same part's pins on its ground net.</td></tr>
   <tr><td class="wrap">pick a series link's side A</td><td class="wrap"><b>Side B</b>: when the
@@ -1417,7 +1423,8 @@ way.</p>
   <li>Add the VRM and set phase 1's output pins (its inductor), input pins and ground pins.</li>
   <li>Set <b>Phases</b> to the number of phases. Each new phase takes the next parts in
     sequence (phase 1 on <code>L1</code> and <code>Q1</code> gives phase 2 <code>L2</code> and
-    <code>Q2</code>), or copies the previous phase when there is no next part.</li>
+    <code>Q2</code>), or the same parts on the next sheet of a board annotated by sheet
+    (<code>L101 → L201</code>), or copies the previous phase when there is no next part.</li>
   <li>Choose each phase in <b>Edit phase</b> to check its pins, and change any that are
     wrong.</li>
   <li>Set the shared set voltage, type, efficiency and sense pins once.</li>

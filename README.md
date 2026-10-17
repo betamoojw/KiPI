@@ -305,7 +305,8 @@ KiPI automatically calculates the input current into the input pins on a VRM bas
 
 **Multi-phase VRMs**: set **Phases** above 1, then choose each phase in **Edit phase** and
 give it its own output pins (e.g. its inductor), input pins and ground pins. A new phase
-takes the next parts in sequence (`L1` → `L2`, `Q1` → `Q2`), or copies the previous one when
+takes the next parts in sequence (`L1` → `L2`, `Q1` → `Q2`), or on a board annotated by
+schematic sheet the same parts on the next sheet (`L101`, `Q101` → `L201`, `Q201`), or copies the previous one when
 there is no next part, so check its pins. All phases share the VRM's set
 voltage, type, efficiency and sense pins. Each phase carries an equal share of the output
 current and settles at whatever voltage its copper needs to deliver that share. The VRM
@@ -399,7 +400,10 @@ the `.yml` file, which is read from then on. AI Agents can make quick work of po
 * **Series link side B**: side A on a part with pads on just two nets (a resistor, ferrite or
   fuse) puts side B on its other net, and a resistor's value becomes the resistance.
 * **New phases** of a multi-phase VRM take the next parts in sequence: `L1` → `L2`,
-  `Q1` → `Q2`.
+  `Q1` → `Q2`. On a board annotated by schematic sheet (from the sheet number × 100 or
+  × 1000) they take the same parts on the next sheet: `L101`, `Q101`, `Q102` → `L201`,
+  `Q201`, `Q202`, when all of them are there. A step set by earlier phases is kept
+  (`Q2`, `Q4` → `Q6`).
 * **Names** follow the picked part while they are still its reference.
 
 ### 4. Solve

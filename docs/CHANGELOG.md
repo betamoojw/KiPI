@@ -178,6 +178,10 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   with no limit keeps none.
 - **3D Models** shows every part on the board, not only the setup's parts on the nets shown:
   the PI Models markers now say which parts are in the setup (#96).
+- New phases of a multi-phase VRM follow a board annotated by schematic sheet (#91): phase 1
+  on `L101`, `Q101` and `Q102` gives phase 2 `L201`, `Q201` and `Q202`, not the next parts in
+  sequence on phase 1's own sheet. A step the earlier phases set is kept too (`Q2`, `Q4` →
+  `Q6`).
 
 ### Internal
 - Board sources are kept apart from the rest of KiPI. `kipi/sources/` holds where boards

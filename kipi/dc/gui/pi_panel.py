@@ -33,7 +33,7 @@ from kipi.core.model.nets import guess_voltage, sorted_nets, voltage_from_name
 from kipi.core.model.parts import is_capacitor_ref, resistor_ohms
 from kipi.dc.pi.autofill import (
     guess_ground_pins, guess_input_pins, guess_other_side, looks_like_ground,
-    next_phase_ref, other_net, setup_grounds,
+    next_phase_refs, other_net, setup_grounds,
 )
 from kipi.dc.pi.model import (
     DEFAULT_VIA_CURRENT_LIMIT_A, DcLink, Load, PinRef, PISetup, Vrm, VrmPhase, active_setup,
@@ -425,7 +425,8 @@ class VrmEditor(_Editor):
                 (self.n_phases, "Parallel phases of a multi-phase regulator. Each carries an "
                                 "equal share of the output current and has its own output, "
                                 "input and ground pins. A new phase takes the next parts in "
-                                "sequence (L1 → L2, Q1 → Q2) where the board has them."),
+                                "sequence (L1 → L2, Q1 → Q2), or the same parts on the next "
+                                "schematic sheet (L101 → L201), where the board has them."),
                 (self.cmb_phase, "The phase whose output, input and ground pins are shown "
                                  "below"),
                 (self.output, "Where the VRM drives its rail: e.g. its output pin, or a "
@@ -555,17 +556,16 @@ class VrmEditor(_Editor):
         ph.input = self.input.value()
         ph.ground = self.ground.value()
         self._autofill_phase(v, ph, old)
-        # A new phase repeats the last one on the next parts in sequence (L1 -> L2,
-        # Q1 -> Q2) where the board has them; otherwise on the same parts, for the user
-        # to change.
+        # A new phase repeats the last one on the parts the next phase likely uses: the
+        # same step on as between the last two, the same parts on the next schematic sheet
+        # (L101 -> L201), or the next in sequence (L1 -> L2); otherwise on the same parts,
+        # for the user to change.
         n = self.n_phases.value()
         snap = self.panel.snapshot
+        roles = ("output", "input", "ground")
         while len(phases) < n:
-            last = phases[-1]
-            phases.append(VrmPhase(*(
-                next_phase_ref(snap, getattr(last, role),
-                               [getattr(q, role).ref for q in phases if getattr(q, role)])
-                for role in ("output", "input", "ground"))))
+            phases.append(VrmPhase(*next_phase_refs(
+                snap, [[getattr(q, r) for r in roles] for q in phases])))
         del phases[n:]
         for ph in phases:
             if v.kind == "source":
