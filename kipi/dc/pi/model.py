@@ -78,6 +78,9 @@ class Vrm:
     dropout_v: float = 0.0               # LDO: least input-output difference it regulates at
     vin_min: Optional[float] = None      # input range it regulates over (LDO / switcher)
     vin_max: Optional[float] = None
+    # Load line (#94): the regulated voltage droops by this many milliohms times the
+    # output current actually drawn (0 = none).
+    load_line_mohm: float = 0.0
     # AC only: control loop bandwidth, kHz (None = not given).
     bandwidth_khz: Optional[float] = None
 
@@ -193,6 +196,7 @@ class PISetup:
                       current_limit_a=v.get("current_limit_a"),
                       dropout_v=v.get("dropout_v", 0.0), vin_min=v.get("vin_min"),
                       vin_max=v.get("vin_max"),
+                      load_line_mohm=v.get("load_line_mohm", 0.0),
                       bandwidth_khz=v.get("bandwidth_khz"))
                   for v in d.get("vrms", [])],
             loads=[Load(name=l["name"], supply=pin(l["supply"]), current=l["current"],
@@ -339,6 +343,8 @@ def validate(setup: PISetup) -> List[str]:
             errors.append(f"VRM {v.name}: the output current limit must be positive")
         if v.quiescent_a < 0 or v.dropout_v < 0:
             errors.append(f"VRM {v.name}: quiescent current and dropout cannot be negative")
+        if v.load_line_mohm < 0:
+            errors.append(f"VRM {v.name}: the load line cannot be negative")
         if v.vin_min is not None and v.vin_max is not None and v.vin_min > v.vin_max:
             errors.append(f"VRM {v.name}: input range minimum is above its maximum")
         if v.sense and groups[v.sense.net] != groups[v.output.net]:

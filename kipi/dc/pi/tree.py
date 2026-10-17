@@ -20,6 +20,10 @@ output delivers, and its input pins are a load on the group feeding it.
   mean of its phase outputs. Each phase draws its own input current (from its own
   output and input voltages) and returns I_out / N - I_in,phase at its ground pins; a
   source VRM's reference is phase 1's ground.
+* Load line (#94): a VRM with a load line R_LL regulates to V_set - R_LL * I_out, where
+  I_out is what its connected loads and the VRMs it feeds actually draw; it is iterated
+  with the rest of the rail. Drops are still measured from V_set, so the droop counts
+  against each load's tolerance.
 
 Unconnected loads (#88): before solving, every group is meshed and each load pin checked
 for a path to its VRM (or ground reference) through copper or series links. A load with
@@ -199,6 +203,7 @@ class _TreeSolver:
         self.v_in: Dict[str, List[float]] = {}
         self.i_in: Dict[str, List[float]] = {}
         self.v_sense: Dict[str, float] = {}
+        self.droop: Dict[str, float] = {}           # load line x output current (#94)
         # Ground-sensing VRMs regulate against their ground sense pins, whose voltage comes
         # from the ground solve, which depends on the rails' currents: iterate both to a
         # fixed point (passes after the first only re-solve the factorized systems).
@@ -389,10 +394,12 @@ class _TreeSolver:
         """Fixed point of the rail: VRM input currents downstream depend on the voltage at
         their input pins, and remote sense (or a multi-phase VRM's mean output) moves the
         output until the regulated pins sit at the set point. Returns (solution, applied
-        voltage, input voltages, currents, iterations)."""
+        voltage, input voltages, currents, iterations). A load line moves the set point
+        down by R_LL times the output current."""
         vrm = rail.vrm
-        target = vrm.voltage + self.v_gsense.get(vrm.name, 0.0)
-        v_src = target
+        set_point = vrm.voltage + self.v_gsense.get(vrm.name, 0.0)
+        r_ll = vrm.load_line_mohm * 1e-3
+        v_src = set_point
         vin_est = {c.name: list(self.v_in.get(c.name, [vrm.voltage] * (len(c.phases) + 1)))
                    for c in rail.children}
         change = 0.0
@@ -409,18 +416,20 @@ class _TreeSolver:
                     new = _mean_v(sol, pp)
                     change = max(change, abs(new - vin_est[c.name][k]))
                     vin_est[c.name][k] = new
+            # Load line: droop with the current actually drawn (disconnected loads add
+            # nothing); without sense pins the VRM holds its output pins directly.
+            self.droop[vrm.name] = r_ll * total
             vr = rail.regulated(sol)
-            if vr is not None:
-                step = target - vr
-                v_src += step
-                change = max(change, abs(step))
+            step = set_point - self.droop[vrm.name] - (v_src if vr is None else vr)
+            v_src += step
+            change = max(change, abs(step))
             if change < V_TOL:
                 break
         else:
             warnings.append(f"{label}: power-tree iteration did not converge "
                             f"(last change {change:.2e} V)")
             self.not_converged.add(self.groups[vrm.output.net])
-        if rail.regulated(sol) is not None:
+        if step:
             sol = system.solve({vrm.name: v_src}, currents, progress=NULL)
         return sol, v_src, vin_est, currents, it
 
@@ -637,7 +646,8 @@ class _TreeSolver:
             sum(ph.p_out for ph in phases),
             sum(ph.p_in for ph in phases) if has_in else None,
             self.v_gsense.get(v.name), phases if n > 1 else [], limit,
-            None if limit is None else abs(i_total) <= limit, regulation)
+            None if limit is None else abs(i_total) <= limit, regulation,
+            v.load_line_mohm, self.droop.get(v.name, 0.0))
 
 
 def solve_tree(snap: BoardSnapshot, setup: PISetup,

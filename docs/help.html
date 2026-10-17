@@ -736,6 +736,13 @@ as you edit. The VRMs, Loads and Series links tabs share one layout: a list with
   <tr><td>Quiescent</td><td class="wrap">LDO and switcher: extra input current.</td></tr>
   <tr><td>Output current limit</td><td class="wrap">Optional. The VRM row shows PASS if its total
     output current (all phases) is at most this.</td></tr>
+  <tr><td>Load line</td><td class="wrap">Optional, DC only (adaptive voltage positioning). The
+    VRM regulates to its set voltage less this resistance times its output current: what its
+    connected loads and the VRMs it feeds actually draw, so a
+    <a href="#ts-no-path">disconnected</a> load adds no droop. Drops are still measured from
+    the set voltage, so the droop counts against each load's tolerance. The Notes tab, the
+    HTML report and the VRM CSV show the droop and the voltage it regulates to
+    (<b>V target</b>). <b>none</b> holds the set voltage.</td></tr>
   <tr><td>Dropout</td><td class="wrap">LDO only: the least input-to-output difference at which it
     still regulates.</td></tr>
   <tr><td>Input min / max</td><td class="wrap">Optional input range. A VRM whose solved input is

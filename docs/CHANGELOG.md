@@ -96,6 +96,12 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
 - The Target Impedance/Frequency Calculator has a **Copy tolerance from DC load** button. It
   fills the AC voltage tolerance from a DC load on the probe's rail: ± its tolerance % of the
   voltage of the VRM feeding it (#87).
+- VRM **Load line** (#94). A VRM with a load line, in mΩ, regulates to its set voltage less
+  the load line times its output current: the current its connected loads and the VRMs it
+  feeds actually draw, so disconnected loads add no droop. It is iterated with the rest of
+  the rail, works with remote sense, multi-phase VRMs and negative rails, and shows in the
+  Notes tab, the power tree diagram, the HTML report and the VRM CSV (**V target**). Drops
+  are still measured from the set voltage, so the droop counts against load tolerances.
 
 ### Changed
 - `python -m kipi` with no arguments starts standalone instead of connecting to the running

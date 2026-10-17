@@ -287,6 +287,7 @@ as missing pins, or two VRMs on one group, are shown in red as you edit.
 | Input pins | LDO and switcher only. The pins it draws from, which ties this VRM to its upstream net and defines the power tree. |
 | Efficiency / Quiescent | Switcher efficiency, LDO quiescent current |
 | Output current limit | Optional: the VRM PASSes if its total output current (all phases) is at most this. Leave at **no limit** to skip the check. |
+| Load line | Optional, in mΩ: the VRM regulates to its set voltage less this times its output current (what its connected loads and downstream VRMs actually draw). Drops are still measured from the set voltage, so the droop counts against load tolerances. |
 | Dropout | LDO only. The least input-to-output difference it regulates at |
 | Input min / max | Optional input range it regulates over. A VRM whose solved input voltage is outside its range, or an LDO below its dropout, cannot hold its set voltage: every load it feeds, directly or downstream, is marked **VRM OUT OF REGULATION** |
 | Sense pins | Optional remote sense: the VRM regulates the voltage at these pins instead of at its output |

@@ -132,12 +132,21 @@ class VrmReport:
     current_limit_a: Optional[float] = None   # total output current limit, if one is set
     passed: Optional[bool] = None             # |I out| within the limit
     regulation: str = ""                     # why the VRM cannot hold its set point
+    load_line_mohm: float = 0.0               # load line (#94), 0 = none
+    v_droop: float = 0.0                      # load line x I out: how far v_target is
+                                              # below v_set
 
     def __setstate__(self, state):
-        # Results files saved before multi-phase VRMs, current limits or regulation
-        # checks lack those fields.
+        # Results files saved before multi-phase VRMs, current limits, regulation
+        # checks or load lines lack those fields.
         self.__dict__.update({"phases": [], "current_limit_a": None, "passed": None,
-                              "regulation": "", **state})
+                              "regulation": "", "load_line_mohm": 0.0,
+                              "v_droop": 0.0, **state})
+
+    @property
+    def v_target(self) -> float:
+        """The voltage the VRM regulates to: its set point less the load-line droop."""
+        return self.v_set - self.v_droop
 
     @property
     def p_loss(self) -> Optional[float]:

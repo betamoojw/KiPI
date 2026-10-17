@@ -32,6 +32,7 @@ def test_report_contents(tmp_path, thermal):
     for l in tree.loads:
         assert l.name in text
     assert "id='pins'" in text and text.count("<details>") >= len(tree.groups)   # #71
+    assert "Load line (mΩ)" in text and "V target" in text      # #94
     assert ("Electro-thermal" in text) == thermal
     assert ("Copper temperature by layer" in text) == thermal
     import re

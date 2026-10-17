@@ -357,6 +357,8 @@ class VrmEditor(_Editor):
         self.iq = _spin(0, 10000, 0, 3, " mA", 0.1)
         self.i_limit = _spin(0, 10000, 0, 3, " A", 0.1)
         self.i_limit.setSpecialValueText("no limit")
+        self.load_line = _spin(0, 1e6, 0, 3, " mΩ", 0.1)
+        self.load_line.setSpecialValueText("none")
         self.dropout = _spin(0, 100, 0, 3, " V", 0.05)
         self.vin_min = _optional_volts()
         self.vin_max = _optional_volts()
@@ -377,6 +379,7 @@ class VrmEditor(_Editor):
         f.addRow("Efficiency", self.eff)
         f.addRow("Quiescent", self.iq)
         f.addRow("Output current limit", self.i_limit)
+        f.addRow("Load line", self.load_line)
         f.addRow("Dropout", self.dropout)
         f.addRow("Input min", self.vin_min)
         f.addRow("Input max", self.vin_max)
@@ -401,6 +404,12 @@ class VrmEditor(_Editor):
                           "current"),
                 (self.i_limit, "PASS if the VRM's total output current (all phases) is at "
                                "most this"),
+                (self.load_line, "Load line (adaptive voltage positioning): the VRM's "
+                                 "set voltage droops by this resistance times its output "
+                                 "current, i.e. the current its connected loads and the "
+                                 "VRMs it feeds actually draw. Drops are still measured "
+                                 "from the set voltage, so the droop counts against each "
+                                 "load's tolerance. 'none' holds the set voltage."),
                 (self.dropout, "LDO dropout: the least input-to-output difference it "
                                "regulates at. Below it, its loads are marked VRM OUT OF "
                                "REGULATION."),
@@ -434,7 +443,7 @@ class VrmEditor(_Editor):
                                     "0 V (needs ground pins)")):
             tip(f, w, text)
         self._watch(self.name, self.kind, self.voltage, self.eff, self.iq, self.i_limit,
-                    self.dropout, self.vin_min, self.vin_max, self.bandwidth)
+                    self.load_line, self.dropout, self.vin_min, self.vin_max, self.bandwidth)
         self.kind.currentIndexChanged.connect(self._kind_rows)
         self.n_phases.valueChanged.connect(self._phase_count_changed)
         self.cmb_phase.currentIndexChanged.connect(self._phase_selected)
@@ -450,7 +459,8 @@ class VrmEditor(_Editor):
         self.form.setRowVisible(self.vin_min, kind != "source")
         self.form.setRowVisible(self.vin_max, kind != "source")
         dc = self.mode == "dc"
-        _gray((self.kind, self.eff, self.iq, self.i_limit, self.n_phases, self.input,
+        _gray((self.kind, self.eff, self.iq, self.i_limit, self.load_line, self.n_phases,
+               self.input,
                self.sense, self.ground_sense, self.dropout, self.vin_min,
                self.vin_max), dc, "Used by the DC analysis only")
         _gray((self.bandwidth,), not dc, "Used by the AC analysis only")
@@ -505,6 +515,7 @@ class VrmEditor(_Editor):
         self.eff.setValue(v.efficiency * 100)
         self.iq.setValue(v.quiescent_a * 1e3)
         self.i_limit.setValue(v.current_limit_a or 0.0)
+        self.load_line.setValue(v.load_line_mohm)
         self.bandwidth.setValue(v.bandwidth_khz or 0.0)
         self.n_phases.setValue(len(v.phases) + 1)
         self._phase = 0
@@ -530,6 +541,7 @@ class VrmEditor(_Editor):
         v.efficiency = self.eff.value() / 100
         v.quiescent_a = self.iq.value() / 1e3
         v.current_limit_a = self.i_limit.value() or None
+        v.load_line_mohm = self.load_line.value()
         v.dropout_v = self.dropout.value()
         v.vin_min = _get_optional(self.vin_min)
         v.vin_max = _get_optional(self.vin_max)
@@ -1716,6 +1728,12 @@ class PIPanel(QWidget):
             role = f"driven by {g.driver}" if g.kind == "rail" else f"ground, referenced at {g.driver}"
             notes.append(f"&nbsp;&nbsp;<b>{html.escape(g.name)}</b> ({role}): "
                          f"{html.escape(', '.join(g.nets))}")
+        for v in tree.vrms:
+            if getattr(v, "load_line_mohm", 0.0):
+                notes.append(f"<b>{html.escape(v.name)}</b> load line: "
+                             f"{v.load_line_mohm:g} mΩ × {v.i_out:.4g} A = "
+                             f"{v.v_droop * 1e3:.4g} mV droop, regulating to "
+                             f"{v.v_target:.5f} V (set {v.v_set:g} V)")
         for l in tree.loads:
             if l.pin_groups:
                 notes.append(f"<b>{html.escape(l.name)}</b> pin groups:")
