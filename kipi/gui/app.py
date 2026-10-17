@@ -203,6 +203,13 @@ def _install_excepthooks():
                                             f"thread {a.thread.name if a.thread else '?'}")
 
 
+def _refocus(app, win) -> None:
+    from qtpy.QtCore import Qt
+    from kipi.gui.single_instance import bring_to_front
+    if app.applicationState() == Qt.ApplicationActive and not win.isActiveWindow():
+        bring_to_front(win)
+
+
 def run(source=None, tool=None, snapshot=None, instance=None) -> int:
     """Show the main window until it is closed. ``source`` and ``tool`` are the window's
     :class:`~kipi.sources.base.BoardSource` and :class:`~kipi.sources.base.InstalledTool`;
@@ -218,10 +225,13 @@ def run(source=None, tool=None, snapshot=None, instance=None) -> int:
     app.setStyle("Fusion")
     splash = show_splash(app)
     win = MainWindow(source=source, tool=tool, snapshot=snapshot)
-    win.show()
+    bring_to_front(win)     # shows it; it opens behind KiCad otherwise (#112)
     tag_window(win)
     if splash is not None and splash.isVisible():
         splash.raise_()     # over the new window until its timer closes it
+        # Closing the splash hands the focus back to whatever is under it; keep it in
+        # KiPI unless the user went elsewhere meanwhile.
+        splash.closed.connect(lambda: _refocus(app, win))
     if instance is not None:
         instance.listen(lambda: bring_to_front(win))
     code = app.exec()

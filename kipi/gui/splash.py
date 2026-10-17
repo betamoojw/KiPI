@@ -12,7 +12,7 @@ import html
 import logging
 from typing import Optional
 
-from qtpy.QtCore import QSize, Qt, QTimer
+from qtpy.QtCore import QSize, Qt, QTimer, Signal
 from qtpy.QtGui import QCursor, QGuiApplication, QMovie, QPalette, QPixmap
 from qtpy.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
@@ -30,6 +30,8 @@ PACKAGES = ("kicad-python", "PySide6-Essentials", "pyvista", "numpy", "scipy")
 
 
 class Splash(QWidget):
+    closed = Signal()
+
     def __init__(self, show_ms: int = SHOW_MS):
         super().__init__(None, Qt.SplashScreen | Qt.FramelessWindowHint
                          | Qt.WindowStaysOnTopHint)
@@ -135,6 +137,7 @@ class Splash(QWidget):
         if self.movie is not None:
             self.movie.stop()
         super().closeEvent(event)
+        self.closed.emit()
 
 
 def show_splash(app=None, show_ms: int = SHOW_MS) -> Optional[Splash]:
