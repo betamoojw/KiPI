@@ -202,6 +202,14 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
 - The board heat model's log line names its direct solver, as the copper solves' lines
   already did, and a test checks that DC and thermal solves both use PARDISO wherever it is
   installed (#108).
+- CI no longer runs for hours (#115). The macOS test job hung in the launcher's setup-window
+  tests: a click handled while the window was still being drawn ended the window's loop
+  before it started, so it waited forever. The setup window now checks for an answer before
+  waiting (this could also happen to a user on a slow machine), and the tests end the window
+  if a check fails rather than hang. Every test now has a 5-minute limit (pytest-timeout)
+  and every job a limit of its own, a new push cancels that branch's older run, and pushes
+  that change only Markdown files skip CI. The tests themselves take about a minute; the
+  rest of a job is installing packages.
 
 ## 0.7.2
 

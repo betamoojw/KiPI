@@ -52,7 +52,7 @@ dependencies = [
 [project.optional-dependencies]
 # Talking to a running KiCad: the plugin, `python -m kipi --dump`, and KIPI_HOST=plugin.
 kicad = ["kicad-python>=0.7.1"]
-dev = ["pytest>=8", "ruff==0.17.0"]  # keep in sync with requirements-dev.txt
+dev = ["pytest>=8", "pytest-timeout>=2.3", "ruff==0.17.0"]  # keep in sync with requirements-dev.txt
 
 [project.urls]
 Homepage = "https://github.com/drewsum/KiPI"
@@ -93,3 +93,5 @@ ignore = [
 testpaths = ["tests"]
 pythonpath = [".", "tests/helpers"]
 addopts = "-ra"
+# pytest-timeout: no test takes near this; one that does has hung (#115).
+timeout = 300

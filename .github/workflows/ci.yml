@@ -3,13 +3,21 @@ name: CI
 on:
   push:
     branches: ["**"]   # every branch, whatever it is named (e.g. v0.6.5)
+    paths-ignore: ["**.md"]   # README and changelog edits change no code (docs/*.html is tested)
   pull_request:
   workflow_dispatch:
+
+# A new push to a branch cancels that branch's run still going: only the latest commit's
+# result matters, and a backlog of runs queues the next ones behind it (#115).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
 
@@ -27,6 +35,8 @@ jobs:
   test:
     name: Tests (${{ matrix.os }}, Python ${{ matrix.python }}${{ matrix.kipy && format(', kicad-python {0}', matrix.kipy) || '' }}${{ matrix.pardiso && ', PARDISO' || '' }})
     runs-on: ${{ matrix.os }}
+    # A whole job takes 2-5 minutes; pytest-timeout ends a hung test well before this.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -119,6 +129,7 @@ jobs:
       (github.event_name == 'pull_request' && github.base_ref == 'main')
       || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -149,6 +160,7 @@ jobs:
   wheels:
     name: Binary wheels (Python ${{ matrix.python }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:

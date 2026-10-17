@@ -104,7 +104,7 @@ class TkUI:
 
     def confirm(self, s: Summary) -> Optional[bool]:
         page = self._page()
-        answer = {"value": None}
+        answer = {"value": None, "done": False}
         ttk.Label(page, text="Set up KiPI", font=("TkDefaultFont", 12, "bold")).pack(anchor="w")
         self._label(page, f"KiPI needs to set up its own Python environment: {s.reason}. "
                           "Nothing is installed until you click Install.")
@@ -157,7 +157,7 @@ class TkUI:
                             + s.size_line(with_p))
 
         def done(value):
-            answer["value"] = value
+            answer["value"], answer["done"] = value, True
             self.root.quit()
 
         buttons = ttk.Frame(page)
@@ -171,7 +171,10 @@ class TkUI:
         update()
         self._on_close = lambda: done(None)
         self._show()
-        self.root.mainloop()
+        # A click (or Return) handled while the window was drawn has answered already. Its
+        # quit() came before the loop, which would then never end (#115).
+        if not answer["done"]:
+            self.root.mainloop()
         self.root.unbind("<Return>")
         self.root.unbind("<Escape>")
         self._on_close = self.root.quit
