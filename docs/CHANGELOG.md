@@ -126,7 +126,8 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
 - Capacitor **aging** (#109). A capacitor model has a **Dielectric**, which fills in its
   typical **Aging** rate (% per decade of hours; editable). With **Capacitor aging** ticked
   in the Sweep tab, each model with a dielectric loses its rate for each decade of **Hours
-  operated** past 1000 hours (ten years by default), on top of its DC bias. **Models from
+  operated** past 1000 hours (ten years by default; set by typing or with a log-scale
+  slider, shown in years), on top of its DC bias. **Models from
   values** reads the dielectric from the value, and the Results notes and HTML report show
   the derated capacitance.
 

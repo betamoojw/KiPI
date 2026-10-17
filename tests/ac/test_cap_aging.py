@@ -152,3 +152,20 @@ def test_the_sweep_switch_and_hours(panel):
     panel.spin_hours.setValue(20000)
     assert panel.setup.ac.aging and panel.setup.ac.aging_hours == 20000
     assert panel.spin_hours.isEnabled()
+
+
+def test_the_hours_slider_shows_only_while_aging(panel):
+    assert panel.w_hours.isHidden()
+    panel.chk_aging.setChecked(True)
+    assert not panel.w_hours.isHidden()
+    panel.sld_hours.setValue(panel.sld_hours.maximum())
+    assert panel.setup.ac.aging_hours == 1e6
+    panel.sld_hours.setValue(panel.sld_hours.minimum())
+    assert panel.setup.ac.aging_hours == 1000
+    panel.sld_hours.setValue(panel.sld_hours.maximum() // 2)          # 10^4.5 h
+    assert panel.setup.ac.aging_hours == 31600
+    panel.spin_hours.setValue(87600)                                  # typed: slider follows
+    assert panel.sld_hours.value() == round((4.9425041 - 3) / 3 * 300)
+    assert panel.lbl_years.text() == "10 years"
+    panel.chk_aging.setChecked(False)
+    assert panel.w_hours.isHidden() and not panel.spin_hours.isEnabled()

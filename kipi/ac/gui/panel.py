@@ -18,8 +18,8 @@ from qtpy.QtCore import Qt, Signal
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QTableWidget,
-    QTabWidget, QToolButton, QVBoxLayout, QWidget,
+    QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QSlider, QSpinBox,
+    QTableWidget, QTabWidget, QToolButton, QVBoxLayout, QWidget,
 )
 
 from kipi.ac.checks import capacitor_candidates, default_ground, validate_ac
@@ -39,6 +39,12 @@ from kipi.gui.sortable import (
 )
 
 TITLE = "AC setup"
+
+# The hours slider (#109) runs on a log scale from 1000 hours, where aging starts, to
+# 1,000,000; the spin box beside it takes any value.
+HOURS_SLIDER_DECADES = (3.0, 6.0)
+HOURS_SLIDER_STEPS = 300
+HOURS_PER_YEAR = 8760.0
 
 
 # ---------------------------------------------------------------------------
@@ -693,17 +699,55 @@ class ACPanel(QWidget):
         self.chk_aging.setChecked(s.aging)
         self.spin_hours = _spin(1, 1e7, s.aging_hours, 0, " h", 1000)
         self.spin_hours.setEnabled(s.aging)
+        self.sld_hours = QSlider(Qt.Horizontal)
+        self.sld_hours.setRange(0, HOURS_SLIDER_STEPS)
+        self.lbl_years = QLabel()
+        self.lbl_years.setMinimumWidth(80)
+        self.w_hours = QWidget()
+        row = QHBoxLayout(self.w_hours)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.sld_hours, 1)
+        row.addWidget(self.lbl_years)
         f.addRow(self.chk_aging)
         f.addRow("Hours operated", self.spin_hours)
+        f.addRow(self.w_hours)
+        self.sld_hours.setToolTip("Drag to set the hours operated, from 1000 hours (no aging "
+                                  "yet) to 1,000,000 on a log scale")
         tip(f, self.chk_aging, "Age the capacitor models that have a dielectric: each loses "
                                "its aging rate per decade of hours operated past 1000 hours")
         tip(f, self.spin_hours, "How long the capacitors have operated (8760 hours a year; "
                                 "87600 is ten years). Heating a ceramic past its Curie point, "
                                 "as in reflow, restarts its aging.")
-        self.chk_aging.toggled.connect(self.spin_hours.setEnabled)
+        self.chk_aging.toggled.connect(self._show_aging)
         self.chk_aging.toggled.connect(self._ac_settings_changed)
         self.spin_hours.valueChanged.connect(self._ac_settings_changed)
+        self.spin_hours.valueChanged.connect(self._sync_hours_slider)
+        self.sld_hours.valueChanged.connect(self._hours_slid)
+        self._sync_hours_slider()
+        self._show_aging(s.aging)
         return w
+
+    def _show_aging(self, on: bool):
+        """The hours operated count only while aging is ticked; the slider shows only then."""
+        self.spin_hours.setEnabled(on)
+        self.w_hours.setVisible(on)
+
+    def _sync_hours_slider(self, *_):
+        """Put the slider where the hours operated are, and give them in years."""
+        h = self.spin_hours.value()
+        lo, hi = HOURS_SLIDER_DECADES
+        x = (np.log10(max(h, 1.0)) - lo) / (hi - lo)
+        self.sld_hours.blockSignals(True)
+        self.sld_hours.setValue(int(round(min(max(x, 0.0), 1.0) * HOURS_SLIDER_STEPS)))
+        self.sld_hours.blockSignals(False)
+        years = h / HOURS_PER_YEAR
+        self.lbl_years.setText(f"{years:.3g} year{'' if years == 1 else 's'}")
+
+    def _hours_slid(self, pos: int):
+        lo, hi = HOURS_SLIDER_DECADES
+        h = 10 ** (lo + (hi - lo) * pos / HOURS_SLIDER_STEPS)
+        digits = int(np.floor(np.log10(h))) - 2              # three significant figures
+        self.spin_hours.setValue(round(h, -digits))         # syncs the slider back
 
     def _mesh_tab(self) -> QWidget:
         w = QWidget()
@@ -770,7 +814,8 @@ class ACPanel(QWidget):
             chk.blockSignals(True)
             chk.setChecked(on)
             chk.blockSignals(False)
-        self.spin_hours.setEnabled(s.aging)
+        self._sync_hours_slider()
+        self._show_aging(s.aging)
 
     # ------------------------------------------------------------------ data
     def nets(self) -> List[str]:

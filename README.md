@@ -522,7 +522,8 @@ series links with DC mode (fields only DC mode uses are grayed out) and adds:
 * **Sweep tab**: start and stop frequency, points per decade, and how many copper field
   solves per decade (the copper's response is interpolated between them). **Capacitor DC
   bias** turns the DC bias estimate on or off for every model at once. **Capacitor aging**
-  ages every model with a dielectric by the **Hours operated** (ten years by default), on top
+  ages every model with a dielectric by the **Hours operated** (ten years by default; type
+  them, or drag the slider that shows while aging is ticked), on top
   of its DC bias: each loses its aging rate per decade of hours past 1000 hours.
 * **Mesh tab**: mesh size, minimum edge at plated holes (which sets the via inductance),
   dielectric loss tangent and default εr.
