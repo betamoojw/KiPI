@@ -22,7 +22,7 @@ class State:
     python: str = ""               # the environment's Python version, "3.13.1"
     kipi_version: str = ""         # the KiPI that set it up
     installed: str = ""            # when, ISO 8601
-    tool: str = "pip"              # "pip" or "uv"
+    tool: str = "pip"              # "pip", "uv", or uv run by "uv (uvx)" / "uv (pipx)"
 
 
 def load(env: Path) -> Optional[State]:

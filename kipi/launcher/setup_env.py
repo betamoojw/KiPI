@@ -10,7 +10,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, Optional, Sequence, Union
 
 from kipi import __version__
 from kipi.launcher import deps
@@ -91,7 +91,7 @@ class Progress:
 def perform(summary: Summary, pardiso: bool, data: Path, requirements: Path,
             on_line: Callable[[str], None], on_fraction: Callable[[Optional[float]], None],
             register: Callable[[Installer], None], fresh: bool = False,
-            uv: Optional[str] = "auto") -> State:
+            uv: Union[None, str, Sequence[str]] = "auto") -> State:
     """Make (or update) the environment and install everything; record it when done.
     ``fresh`` starts from an empty environment. Raises Canceled or InstallError."""
     env = summary.env
@@ -105,7 +105,7 @@ def perform(summary: Summary, pardiso: bool, data: Path, requirements: Path,
         if f is not None:
             on_fraction(f)
 
-    tools: List[Optional[str]] = [uv, None] if uv else [None]
+    tools: list = [uv, None] if uv else [None]
     for attempt, tool in enumerate(tools):
         inst = Installer(summary.python, env, line, tool)
         register(inst)
@@ -133,7 +133,7 @@ def perform(summary: Summary, pardiso: bool, data: Path, requirements: Path,
             raise
         except InstallError as e:
             if attempt + 1 < len(tools):
-                line(f"uv failed ({e}); starting again with pip")
+                line(f"{inst.tool} failed ({e}); starting again with pip")
                 fresh = True            # uv's environment has no pip of its own
                 continue
             raise

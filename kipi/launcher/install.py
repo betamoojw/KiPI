@@ -1,7 +1,8 @@
 """Making KiPI's environment and installing packages into it.
 
-uv makes both much faster, so it is used when it is on the PATH; otherwise, or when uv
-fails, the standard ``venv`` module and pip do the same. Each command's output goes to
+uv makes both much faster, so it is used when it can be found: on the PATH, or run through
+uvx or pipx, which fetch it (#113). Otherwise, or when uv fails, the standard ``venv``
+module and pip do the same. Each command's output goes to
 ``on_line`` as it comes, and :meth:`Installer.cancel` stops the one running.
 """
 
@@ -11,7 +12,7 @@ import shutil
 import subprocess
 import threading
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, Union
 
 from kipi.launcher.paths import env_python
 from kipi.launcher.system import Python, child_kwargs
@@ -31,23 +32,24 @@ class Canceled(Exception):
 
 class Installer:
     def __init__(self, python: Python, env: Path, on_line: Callable[[str], None],
-                 uv: Optional[str] = None):
-        """``uv`` is the uv program to use, or None for venv and pip."""
+                 uv: Union[None, str, Sequence[str]] = None):
+        """``uv`` is the uv program to use, or the command that runs it (``["pipx", "run",
+        "uv"]``), or None for venv and pip."""
         self.python = python
         self.env = env
         self.on_line = on_line
-        self.uv = uv
+        self.uv: Optional[List[str]] = [uv] if isinstance(uv, str) else list(uv) if uv else None
         self._proc: Optional[subprocess.Popen] = None
         self._canceled = threading.Event()
 
     @property
     def tool(self) -> str:
-        return "uv" if self.uv else "pip"
+        return uv_label(self.uv) if self.uv else "pip"
 
     # --- commands ---------------------------------------------------------------------
     def create_env(self) -> None:
         if self.uv:
-            self._run([self.uv, "venv", "--python", self.python.executable, str(self.env)])
+            self._run([*self.uv, "venv", "--python", self.python.executable, str(self.env)])
         else:
             self._run([self.python.executable, "-m", "venv", str(self.env)])
         if not env_python(self.env).is_file():
@@ -56,14 +58,14 @@ class Installer:
     def install(self, requirements: Optional[Path] = None, packages: Sequence[str] = ()) -> None:
         args = (["-r", str(requirements)] if requirements else []) + list(packages)
         if self.uv:
-            self._run([self.uv, "pip", "install", "--python", str(env_python(self.env)), *args])
+            self._run([*self.uv, "pip", "install", "--python", str(env_python(self.env)), *args])
         else:
             self._run([str(env_python(self.env)), "-m", "pip", "install",
                        "--disable-pip-version-check", *args])
 
     def uninstall(self, packages: Sequence[str]) -> None:
         if self.uv:
-            self._run([self.uv, "pip", "uninstall", "--python", str(env_python(self.env)),
+            self._run([*self.uv, "pip", "uninstall", "--python", str(env_python(self.env)),
                        *packages])
         else:
             self._run([str(env_python(self.env)), "-m", "pip", "uninstall", "-y",
@@ -103,8 +105,26 @@ class Installer:
                                + " | ".join(tail[-3:]))
 
 
-def find_uv() -> Optional[str]:
-    return shutil.which("uv")
+def find_uv(which: Callable[[str], Optional[str]] = shutil.which) -> Optional[List[str]]:
+    """The command that runs uv: uv itself, else uvx or pipx running it (each fetches uv
+    the first time). None if there is none of them, for venv and pip."""
+    uv = which("uv")
+    if uv:
+        return [uv]
+    uvx = which("uvx")
+    if uvx:
+        beside = Path(uvx).with_name(Path(uvx).name.replace("uvx", "uv", 1))
+        return [str(beside)] if beside.is_file() else [uvx, "uv"]
+    pipx = which("pipx")
+    if pipx:
+        return [pipx, "run", "uv"]
+    return None
+
+
+def uv_label(cmd: Sequence[str]) -> str:
+    """How uv is run, for the log and the setup record: "uv", "uv (uvx)", "uv (pipx)"."""
+    first = Path(cmd[0]).stem.lower()
+    return "uv" if len(cmd) == 1 else f"uv ({first})"
 
 
 def remove_env(env: Path, data: Path) -> None:

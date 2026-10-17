@@ -159,6 +159,30 @@ def test_when_uv_fails_pip_starts_again(tmp_path, fake_installer):
     assert st.tool == "pip"
 
 
+def test_uv_is_found_on_the_path_or_through_uvx_or_pipx(tmp_path):
+    # #113: uv when there is one, else uvx or pipx fetching it, else venv and pip.
+    def which(*have):
+        return lambda name: str(tmp_path / f"{name}.exe") if name in have else None
+    assert install.find_uv(which("uv", "uvx", "pipx")) == [str(tmp_path / "uv.exe")]
+    assert install.find_uv(which("uvx", "pipx")) == [str(tmp_path / "uvx.exe"), "uv"]
+    (tmp_path / "uv.exe").write_text("")          # uv beside uvx, just not on the PATH
+    assert install.find_uv(which("uvx")) == [str(tmp_path / "uv.exe")]
+    assert install.find_uv(which("pipx")) == [str(tmp_path / "pipx.exe"), "run", "uv"]
+    assert install.find_uv(which()) is None
+    assert install.uv_label(["/x/uv"]) == "uv"
+    assert install.uv_label(["C:/x/pipx.exe", "run", "uv"]) == "uv (pipx)"
+
+
+def test_installer_runs_uv_through_pipx(tmp_path):
+    ran = []
+    inst = install.Installer(_summary(tmp_path / "venv").python, tmp_path / "venv",
+                             lambda line: None, ["pipx", "run", "uv"])
+    inst._run = ran.append
+    inst.install(packages=["numpy"])
+    assert ran[0][:5] == ["pipx", "run", "uv", "pip", "install"] and ran[0][-1] == "numpy"
+    assert inst.tool == "uv (pipx)"
+
+
 def test_a_real_environment_is_made(tmp_path):
     """venv and pip for real, installing nothing (no network needed)."""
     data = tmp_path / "KiPI"

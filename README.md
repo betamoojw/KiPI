@@ -123,8 +123,10 @@ folder:
 | macOS | `~/Library/Application Support/KiPI` |
 | Linux | `~/.local/share/kipi` |
 
-(`KIPI_HOME` puts it elsewhere.) Setting up takes a few minutes; with
-[uv](https://docs.astral.sh/uv/) on the PATH it is faster. Later starts open KiPI straight
+(`KIPI_HOME` puts it elsewhere.) Setting up takes a few minutes. The launcher installs
+with [uv](https://docs.astral.sh/uv/), which is much faster, when it can: uv on the PATH,
+or uvx or [pipx](https://pipx.pypa.io/) to fetch it. With none of them, or if uv fails, it
+uses Python's own venv and pip. Later starts open KiPI straight
 away, and the launcher sets up again by itself when a new KiPI needs different packages.
 With no window available (no tkinter, or `--console`), setup asks in the terminal instead.
 
@@ -645,7 +647,7 @@ The tests also solve the example board and check that its committed setup still 
 | `kipi_entry.py`, `plugin.json` | KiCad IPC plugin action (runs KiPI as the plugin) |
 | `kipi/__main__.py` | `python -m kipi` / `kipi`: standalone, or the plugin with `KIPI_HOST=plugin` |
 | `kipi_launcher.py`, `.pyw` | Standalone launcher: sets up KiPI's environment on the first start, then starts KiPI in it |
-| `kipi/launcher/` | The launcher itself, standard library only: environment location, Python discovery, the package list and sizes (`deps.py`, `deps_manifest.json`), the installer (uv or venv and pip), the setup screens (`ui_tk.py`, `ui_console.py`) and shortcuts |
+| `kipi/launcher/` | The launcher itself, standard library only: environment location, Python discovery, the package list and sizes (`deps.py`, `deps_manifest.json`), the installer (uv, run directly or through uvx or pipx, or venv and pip), the setup screens (`ui_tk.py`, `ui_console.py`) and shortcuts |
 | `kipi/host.py` | Plugin or standalone: how KiPI was started |
 | `kipi/core/` | Shared by every analysis; no Qt and no analysis-specific physics: |
 | `kipi/core/model/` | Toolkit-independent board model, copper layer ids, stackup building, JSON snapshot save/load, power-net heuristics |

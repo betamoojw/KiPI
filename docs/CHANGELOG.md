@@ -129,6 +129,9 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   Windows it takes the foreground from KiCad, and, if Windows refuses, it still opens on top
   of the other windows. It stays in front after the welcome screen closes, unless you have
   switched to another app in the meantime.
+- The standalone launcher installs KiPI's packages with uv even when uv is not on the PATH
+  (#113). It uses uvx or pipx to fetch uv, and falls back to venv and pip as before when
+  none of them is available. The setup log names the route taken, for example *uv (pipx)*.
 
 ### Internal
 - Board sources are kept apart from the rest of KiPI. `kipi/sources/` holds where boards
