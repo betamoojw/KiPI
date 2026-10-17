@@ -164,7 +164,7 @@ figure svg { display: block; max-width: 760px; background: var(--panel);
 <main>
 <h1>How KiPI works</h1>
 <p class="lead">What power integrity analysis is, why it is worth doing before a board is
-built, and how KiPI's DC, thermal and AC solvers turn a KiCad layout into voltages,
+built, and how KiPI's DC, thermal and AC solvers turn a PCB layout into voltages,
 currents, temperatures and impedances.</p>
 <div class="toolbar">
   <button type="button" id="theme">Toggle light/dark</button>
@@ -283,8 +283,8 @@ voltages, and the currents injected at the pads. Then:</p>
     for drill <i>d</i> and plating <i>t<sub>p</sub></i>. A 0.3 mm via through 1.6 mm of
     board is about 1.3 mΩ.</li>
   <li>A <b>VRM output</b> holds its pads at its set voltage (a fixed node voltage).</li>
-  <li>A <b>load</b> draws its current from its pads, shared equally between them.</li>
-  <li>A <b>series part</b> (a sense resistor or a ferrite bead's DC resistance) joins the
+  <li>A <b>load</b> draws its current from its pads, shared equally between them or split into groups of pads with different current requirements.</li>
+  <li>A <b>series part</b> (a sense resistor, load switch or a ferrite bead's DC resistance) joins the
     pads on both sides through its resistance, so the nets it joins are solved as one.</li>
 </ul>
 <p>Solving gives the voltage at every node. The current density comes from the voltage
@@ -300,14 +300,14 @@ gradient, the via currents from the barrels, and the power lost in the copper fr
     (η·V<sub>in</sub>)</i>. Its input voltage depends on the drop on the input rail, which
     depends on the current it draws, so KiPI iterates the two until they agree.</li>
   <li><b>Remote sense</b> moves a VRM's output until its sense pins sit at the set voltage, as
-    the real control loop does.</li>
+    the real control loop does. This creates voltage boost in some places, and drop in other places.</li>
   <li><b>Ground</b> is a net like any other: loads return their current through their ground
     pins, so ground drops count too.</li>
 </ul>
 
 <h3 id="dc-tolerance">Tolerance analysis</h3>
 <p>Each load can have a <b>tolerance</b>: how far its supply may sit from the nominal voltage,
-as ± percent, taken from the chip's datasheet. After the solve, KiPI checks every supply pin
+as ± percent or in volts, taken from the load's datasheet. After the solve, KiPI checks every supply pin
 of the load. The worst pin's deviation from the VRM's set voltage (from DC drop on the rail,
 rise on ground, and a VRM load line if it has one) must be within the tolerance for the load
 to <span class="pass">PASS</span>. Any pin outside it makes the load
@@ -319,6 +319,7 @@ to <span class="pass">PASS</span>. Any pin outside it makes the load
     accuracy and the AC ripple and droop. The DC drop may only use part of it. If a 1.0 V
     ±5% rail's regulator is ±1% accurate and you budget 2% for AC, the DC drop gets the
     remaining 2%: enter 2 for the load, not 5.</li>
+    <li>The regulator tolerance, the ±1% in the above bullet, can be derived from feeedback resistor tolerances and the regulator's datasheet specifications for its reference voltage accuracy.</li>
   <li>Use the worst-case current, not the typical one, since drop scales with current. With
     electro-thermal on, the check uses the copper at its solved temperature, which is when
     its resistance is highest.</li>
@@ -374,8 +375,8 @@ amplifier at full swing. The regulator's control loop corrects slowly, typically
 or hundreds of kHz, so faster changes in current are supplied by the capacitors and the
 planes. How much the voltage moves for a given change in current depends on frequency:</p>
 <p class="eq">ΔV(f) = Z(f) · ΔI(f)</p>
-<p><b>PDN impedance</b> <i>Z(f)</i> is the impedance a chip sees looking into its power pins,
-with every capacitor, plane and via between them and ground. It is a complex number at
+<p><b>PDN impedance</b> <i>Z(f)</i> is the impedance a chip sees looking out of its power pins into the power supply network. It is the ratio of voltage change to current change, and it depends on
+ every capacitor, plane and via between them and ground. It is a complex number at
 each frequency: KiPI shows its magnitude |Z| and its resistive and reactive parts.</p>
 <figure>
 <svg viewBox="0 0 640 250" width="100%" role="img" aria-label="Sketch of PDN impedance against frequency: a target line, and a curve that dips at each capacitor's resonance with peaks between">
@@ -397,7 +398,7 @@ resonance. Where one group hands over to the next, an inductance meets a capacit
 the impedance peaks (an anti-resonance). Above the plane's range, inductance wins.</figcaption>
 </figure>
 <p>A real capacitor is not a pure capacitance. It also has an equivalent series inductance
-(ESL, from its body, pads and vias) and resistance (ESR). Below its self-resonant frequency
+(ESL, from its construction, termination, and mounting) and resistance (ESR). These factors vary greatly from capaitor to capacitor and case size to case size. Below its self-resonant frequency
 it acts as a capacitor and its impedance falls with frequency. Above it, it acts as an
 inductor and its impedance rises. That is why a PDN uses many values: bulk capacitors for
 low frequencies, many small ceramics for the middle, and the plane pair's own capacitance
@@ -415,9 +416,9 @@ applies. KiPI's target calculator works both out from the load's transient spec 
 Smith et al., 1999). Some chip vendors publish a frequency-dependent target mask instead,
 which KiPI takes as corner points.</p>
 <p>KiPI leaves the regulator out of the AC model and computes the <b>open-loop</b> PDN
-impedance. Below the regulator's control-loop bandwidth, the loop holds the voltage. Above
+impedance. Below the regulator's control-loop bandwidth, the loop is assumed to hold the voltage. Above
 it, the loop is too slow, which is the range a target applies to, so you give each VRM's
-bandwidth and the targets are judged from there up.</p>
+bandwidth and the targets are judged from there up. Other analysis methods can model the interaction with the control loop and the capacitive portion of hte PDN, this is called <b>closed-loop</b> analysis and is outside the scope of KiPI.</p>
 
 <h3 id="ac-model">How KiPI models it</h3>
 <p>The AC solver uses the same triangle mesh, extended for the fields between rail and
@@ -436,16 +437,16 @@ ground copper:</p>
     a small capacitor of very low inductance that matters at hundreds of MHz.</li>
   <li><b>Vias</b> join the faces of each layer through their barrels. Their inductance, and the
     inductance of a capacitor's mounting, comes out of how current spreads to them on the
-    planes. You enter only each capacitor's own ESL, not its mounting.</li>
+    planes. You enter only each capacitor's own self ESL, not its mounting.</li>
   <li><b>Capacitors</b> are series RLC models at their pads. A ferrite bead or resistor
-    between nets is a series link.</li>
+    between nets is a series link and can include DCR and ESL.</li>
 </ul>
 <p>For two facing planes this is the classic plane-pair (cavity) model, so plane resonances
 come out of the mesh, as does the spreading inductance between a capacitor and the chip.
 The sweep factorizes the copper model at a few frequencies per decade, solves for every
 capacitor and probe port at once, interpolates that smoothly, and adds the capacitors at
 each of the many frequencies plotted. This keeps a sweep from 1 kHz to 300 MHz at a few
-hundred points per decade fast.</p>
+hundred points per decade fast. Note this this creates a massive computational problem. AC solves can take a long time.</p>
 
 <h3 id="ac-capacitance">Effective vs nominal capacitance</h3>
 <p>The capacitance printed on a ceramic capacitor (MLCC) is measured at 1 kHz, 25 °C, with
@@ -464,7 +465,7 @@ conditions. Four effects stack up:</p>
     falls. Small cases and low voltage ratings have thinner layers, a stronger field at the
     same voltage, and lose the most. C0G does not have this effect.</td><td class="wrap">Often
     −30% to −80% at the rated voltage. A 10 µF 0402 6.3 V X5R part can keep under half its
-    capacitance at 3.3 V.</td></tr>
+    capacitance at 3.3 V. Good design practice dictates that a cap should only be exposed to half its rated voltage, for both safety factor purposes and to minimize DC bias impact.</td></tr>
   <tr><td>Aging</td><td class="wrap">After a class II part last cooled through its Curie point
     (about 125 °C, as in reflow), its domains slowly relax and its capacitance falls
     logarithmically with time: the same loss each decade of hours. Heating above the Curie
@@ -481,8 +482,7 @@ conditions. Four effects stack up:</p>
 the part's resonance and moves the resonance up, by the square root of the ratio, while
 the inductance above resonance does not change. Capacitor makers publish DC-bias and
 temperature curves per part, and their online tools (Murata SimSurfing, TDK SEAT, KEMET
-K-SIM, Samsung's tool) give the capacitance, ESR and ESL at a chosen bias and temperature. Use
-those, rather than the nominal value, for the models KiPI solves with.</p>
+K-SIM, Samsung's tool) give the capacitance, ESR and ESL at a chosen bias and temperature. Enter the manufacturer's delectric, tolerance, aging and DC bias factors. KiPI can work out how each impacts the PDN impedance.</p>
 
 <h2 id="solvers">Linear solvers and PARDISO</h2>
 <p>Every analysis ends in a large sparse system of equations, one unknown per mesh node. DC
@@ -517,11 +517,11 @@ solves them:</p>
 Linux (not macOS or ARM), and small boards, which solve in a second either way, gain little.
 That is why it is not installed by default. KiPI falls back to SuperLU on its own if PARDISO
 is missing, cannot load, or returns an inaccurate result, and the results are the same either
-way. <i>About → Copy version info</i> says which solver is in use. See the README for how to
-add it.</p>
+way. Because PARDISO utilizes all cores, the machine running the simulation will really stretch its legs. Expect high CPU utilization and higher junction temperatures, at the gain of simulation speed. <i>About → Copy version info</i> says which solver is in use. See the README for how to
+add it. </p>
 
 <h2 id="uses">What PI simulation finds</h2>
-<p>Problems KiPI typically shows up, and where to look for each:</p>
+<p>Design problems KiPI typically exposes, and where to look for each:</p>
 <table>
   <tr><th>Problem</th><th>How it shows</th><th>Typical fix</th></tr>
   <tr><td>Neck-downs</td><td class="wrap">A bright spot in the current density where a plane
@@ -529,25 +529,25 @@ add it.</p>
     the path, move the obstacle, add a parallel layer.</td></tr>
   <tr><td>Too few vias</td><td class="wrap">Vias over their current rating in the via table,
     or one via carrying most of the current while its neighbors idle.</td><td class="wrap">Add
-    vias, spread them along the current's path, use larger drills.</td></tr>
+    vias, spread them along the current's path.</td></tr>
   <tr><td>Load out of tolerance</td><td class="wrap">A load FAILs; the voltage map shows
     where the drop is.</td><td class="wrap">Thicker copper, a wider pour, the VRM closer, or
-    remote sense at the load.</td></tr>
+    remote sense at the load, or add more parallel copper planes.</td></tr>
   <tr><td>Ground drop</td><td class="wrap">The ground net's own voltage map, with load
     grounds sitting tens of mV above the VRM.</td><td class="wrap">Solid ground under the
-    current's path; no slots across it.</td></tr>
+    current's path; no slots across it. More ground planes</td></tr>
   <tr><td>Sense in the wrong place</td><td class="wrap">The sense point meets its set voltage
-    while the far loads fail.</td><td class="wrap">Sense at the most critical load, or where
+    while the far loads fail.</td><td class="wrap">Sense at the most critical (high current, tighter tolerance) load, or where
     the loads are grouped.</td></tr>
   <tr><td>Hot spots</td><td class="wrap">The temperature map, the hottest copper per layer,
     and a drop that grows with each electro-thermal pass.</td><td class="wrap">More copper or
     layers, a wider path, airflow.</td></tr>
   <tr><td>Anti-resonance peaks</td><td class="wrap">|Z| above the target between two
     capacitor groups, or where the plane resonates.</td><td class="wrap">Add intermediate
-    values, change ESR, move capacitors.</td></tr>
+    values, change ESR, physically move capacitors in the layout.</td></tr>
   <tr><td>Capacitors too far away</td><td class="wrap">High impedance above a few MHz at the
     probe despite enough capacitance on the rail.</td><td class="wrap">Move capacitors next to
-    the pins, shorten their vias, use thinner dielectric to ground.</td></tr>
+    the pins, shorten their vias, use thinner dielectric to ground. Consider smaller case size/lower ESR/lower ESL capacitors at load. Adding these at supply will do little.</td></tr>
 </table>
 
 <h2 id="limits">What KiPI does not model</h2>
@@ -555,14 +555,14 @@ add it.</p>
   <li><b>DC</b>: copper is solid and its thickness uniform. Plating variation and etch
     undercut are not modeled; KiPI uses the stackup's thicknesses.</li>
   <li><b>Thermal</b>: steady state only, with one temperature through the board's thickness
-    and no heat carried away by the parts, enclosure or conduction into the mounting.</li>
+    and no heat carried away by the parts, enclosure or conduction into the mountin. No heatsinks; this tool is meant to model copper losses and expose weak points, not simulate the thermal scenario of an entire system.</li>
   <li><b>AC</b>: the regulator is left out (open-loop impedance). The package and die are
     not in the model; probes sit on the board's pads. Capacitors are fixed RLC models, so
     DC bias and aging are for you to apply to the value you enter. Radiation and coupling
     to signal nets are not modeled.</li>
 </ul>
 <p>Like any simulation, the results are only as good as the setup. Check that the load
-currents are worst case, the capacitor values effective, and the stackup right.</p>
+currents are worst case, the capacitor values effective, and the stackup right. The tool is incredibly powerful with thoughtful and complete inputs.</p>
 
 <h2 id="more">Further reading</h2>
 <ul>
@@ -577,6 +577,7 @@ currents are worst case, the capacitor values effective, and the stackup right.<
   <li>M. Swaminathan and A. E. Engin, <i>Power Integrity Modeling and Design for Semiconductors
     and Systems</i>, Prentice Hall, 2007.</li>
   <li>E. Bogatin, <i>Signal and Power Integrity — Simplified</i>, 3rd ed., Prentice Hall, 2018.</li>
+  <li>P. Horowitz and W. Hill, <i>The Art of Electronics</i>, 3rd ed., Cambridge University Press, 2015. Outstanding reading for any electronics designer.</li>
 </ul>
 </main>
 </div>
