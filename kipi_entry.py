@@ -22,6 +22,8 @@ def main() -> int:
     # pipe blocks the writer forever. Send everything to this session's log folder.
     kipi_app.detach_std_streams()
     os.environ.setdefault("QT_API", "pyside6")
+    from kipi.host import Host, set_current
+    set_current(Host.PLUGIN)
     from kipi.gui import single_instance
     instance = single_instance.claim()
     if instance is None:        # another KiPI is open; it was brought to the front

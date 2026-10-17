@@ -122,7 +122,7 @@ def test_opening_results_needs_a_board(app, window, monkeypatch):
     monkeypatch.setattr("qtpy.QtWidgets.QFileDialog.getOpenFileName",
                         lambda *a, **k: pytest.fail("asked for a file with no board"))
     window.open_results()
-    assert told and "Load the board" in told[0]
+    assert told and "Load or open the board" in told[0]
     assert window._tree is None
 
 

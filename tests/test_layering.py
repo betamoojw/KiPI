@@ -102,7 +102,11 @@ def test_only_entry_points_pick_the_kicad_source():
 
 
 def test_the_gui_sees_only_source_interfaces():
+    """The window knows sources by their interface, and opens files through the registry
+    of formats; it never names a reader itself."""
     def rule(rel, module):
         return (rel.startswith("kipi/gui/") and _under(module, "kipi.sources")
-                and module != "kipi.sources" and not _under(module, "kipi.sources.base"))
+                and module != "kipi.sources"
+                and not any(_under(module, m) for m in ("kipi.sources.base",
+                                                        "kipi.sources.registry")))
     assert _violations(rule) == []

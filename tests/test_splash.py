@@ -30,10 +30,19 @@ def _text(s):
     return " ".join(lb.text() for lb in s.findChildren(QLabel))
 
 
-def test_shows_version_and_packages(app):
+def test_shows_version_and_packages(app, plugin_host):
     s = splash.Splash()
     text = _text(s)
     assert __version__ in text and "com.github.drewsum.kipi" in text and "Python" in text
+    assert "KiCad plugin" in text
+    s.close()
+
+
+def test_standalone_says_so_and_is_no_plugin(app):
+    s = splash.Splash()
+    text = _text(s)
+    assert "Standalone" in text and "com.github.drewsum.kipi" not in text
+    assert __version__ in text
     s.close()
 
 

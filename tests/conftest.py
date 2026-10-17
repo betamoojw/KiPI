@@ -10,6 +10,23 @@ def no_kicad_settings(monkeypatch):
     monkeypatch.setattr(colors, "_config_roots", lambda: [])
 
 
+@pytest.fixture(autouse=True)
+def standalone_host(monkeypatch):
+    """Tests run standalone unless they say otherwise (``kipi.host.set_current``), whatever
+    this machine's environment, and a host one test sets never leaks into the next."""
+    from kipi import host
+    monkeypatch.delenv(host.HOST_ENV, raising=False)
+    monkeypatch.delenv(host.KICAD_SOCKET_ENV, raising=False)
+    monkeypatch.setattr(host, "_current", None)
+
+
+@pytest.fixture
+def plugin_host(monkeypatch):
+    """Run the test as the KiCad plugin."""
+    from kipi import host
+    monkeypatch.setattr(host, "_current", host.Host.PLUGIN)
+
+
 @pytest.fixture
 def no_3d(monkeypatch):
     """Build MainWindow with a stand-in for the 3D view.

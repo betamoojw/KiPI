@@ -19,6 +19,7 @@ from qtpy.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from kipi import __version__
 from kipi.gui import about
 from kipi.gui.identity import APP_ID
+from kipi.host import Host, current as current_host
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +50,11 @@ class Splash(QWidget):
             logo.setPixmap(QPixmap(str(path)).scaled(
                 LOGO_SIZE, LOGO_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        rows = [("Version", __version__), ("Plugin", APP_ID), ("License", about.LICENSE)]
+        host = current_host()
+        rows = [("Version", __version__), ("Mode", host.label)]
+        if host is Host.PLUGIN:
+            rows.append(("Plugin", APP_ID))
+        rows.append(("License", about.LICENSE))
         rows += [(k, v) for k, v in about.versions(solver=False)
                  if k == "Python" or k in PACKAGES]
         dim = self.palette().color(QPalette.PlaceholderText).name()

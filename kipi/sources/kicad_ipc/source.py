@@ -72,6 +72,7 @@ class InstalledKiCad(InstalledTool):
     kicad-cli). ``live`` is the running KiCad, when there is one: it knows where its own
     kicad-cli is."""
     name = "KiCad"
+    offers_part_models = True
 
     def __init__(self, live: Optional[KiCadLiveSource] = None):
         self._live = live

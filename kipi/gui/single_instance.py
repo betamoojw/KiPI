@@ -1,4 +1,4 @@
-"""Allow one KiPI at a time per user.
+"""Allow one KiPI at a time per user, as a plugin and standalone each.
 
 The first KiPI holds a lock file and listens on a local socket (a named pipe on Windows).
 A second one finds the lock taken, asks the first to bring its window to the front, and
@@ -7,6 +7,9 @@ exits; if the first does not answer, it says that KiPI is already open instead.
 The lock is a :class:`QLockFile`, which records the owner's PID, so a KiPI that crashed
 or was killed does not lock the next one out. Like the app identity, this is best effort:
 if the lock file cannot be written at all, KiPI starts anyway.
+
+The plugin and the standalone app have a lock each: a standalone KiPI that is open must
+not answer KiCad's plugin button for the board in the PCB editor, nor the other way round.
 """
 
 from __future__ import annotations
@@ -25,6 +28,8 @@ os.environ.setdefault("QT_API", "pyside6")
 
 from qtpy.QtCore import QLockFile  # noqa: E402
 
+from kipi.host import Host, current as current_host  # noqa: E402
+
 log = logging.getLogger(__name__)
 
 ACTIVATE = b"activate\n"
@@ -40,12 +45,18 @@ def _user() -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", name) or "user"
 
 
+def _name() -> str:
+    """The plugin keeps the name it always had; the standalone app has its own."""
+    mode = "" if current_host() is Host.PLUGIN else "standalone-"
+    return f"kipi-{mode}{_user()}"
+
+
 def lock_path() -> Path:
-    return Path(tempfile.gettempdir()) / f"kipi-{_user()}.lock"
+    return Path(tempfile.gettempdir()) / f"{_name()}.lock"
 
 
 def server_name() -> str:
-    return f"kipi-{_user()}"
+    return _name()
 
 
 class InstanceGuard:
@@ -190,9 +201,10 @@ def claim(path: Optional[Path] = None) -> Optional[InstanceGuard]:
     from qtpy.QtWidgets import QMessageBox
     from kipi.gui.identity import make_app
     _app = make_app()  # noqa: F841 - must outlive the box
+    mode = "the KiPI plugin" if current_host() is Host.PLUGIN else "standalone KiPI"
     QMessageBox.information(
         None, "KiPI",
         "KiPI is already open" + (f" (PID {pid})" if pid else "") + ".\n\n"
-        "Only one KiPI can run at a time. Switch to its window, or close it and start "
-        "KiPI again.")
+        f"Only one {mode} can run at a time. Switch to its window, or close it and "
+        "start KiPI again.")
     return None

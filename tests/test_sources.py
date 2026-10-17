@@ -38,10 +38,13 @@ class FakeSource(BoardSource):
 
 
 def _idle(app, w, timeout=30.0):
-    t0 = time.time()
+    """Wait until the window stays idle: a task's thread stops before its result reaches
+    the window, and the result can start the next task."""
+    t0, quiet = time.time(), 0
     while time.time() - t0 < timeout:
         app.processEvents()
-        if not w._busy() and not w._sync_timer.isActive():
+        quiet = quiet + 1 if not w._busy() and not w._sync_timer.isActive() else 0
+        if quiet >= 10:
             return
         time.sleep(0.01)
     raise AssertionError("window did not go idle")
@@ -49,7 +52,7 @@ def _idle(app, w, timeout=30.0):
 
 # --- The window --------------------------------------------------------------------------
 
-def test_a_source_gets_load_refill_and_select(app, no_3d):
+def test_a_source_gets_load_refill_and_select(app, no_3d, plugin_host):
     from kipi.gui.main_window import MainWindow
     src = FakeSource()
     w = MainWindow(source=src)

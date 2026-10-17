@@ -28,6 +28,8 @@ from kipi.dc.gui.pi_panel import PIPanel
 from kipi.dc.pi.tree import fmt_drop
 from kipi.gui.viewer3d import Viewer3D
 from kipi.gui.worker import QtProgress, Task
+from kipi.host import Host, current as current_host
+from kipi.sources import registry
 from kipi.sources.base import BoardSource, InstalledTool
 
 log = logging.getLogger("kipi")
@@ -42,12 +44,14 @@ VIA_PICK_PX = 10      # a click this close to a via barrel on screen selects it
 
 class MainWindow(QMainWindow):
     def __init__(self, source: Optional[BoardSource] = None, tool: Optional[InstalledTool] = None,
-                 snapshot: Optional[BoardSnapshot] = None):
-        """``source`` is where Load reads the board from (None: only snapshots are opened);
-        ``tool`` the design tool on this computer that gives layer colors and part models
-        (None: KiPI's own colors, no models)."""
+                 snapshot: Optional[BoardSnapshot] = None, host: Optional[Host] = None):
+        """``source`` is where Load reads the board from (None: no board yet, or only
+        snapshots); ``tool`` the design tool on this computer that gives layer colors and
+        part models (None: KiPI's own colors, no models); ``host`` how KiPI was started
+        (default :func:`kipi.host.current`), which picks the toolbar."""
         super().__init__()
-        self.setWindowTitle(f"KiPI {__version__} — Power Integrity")
+        self.host = host or current_host()
+        self._set_title("Power Integrity")
         self.resize(1500, 950)
         self._source = source
         self._tool = tool or InstalledTool()
@@ -102,6 +106,7 @@ class MainWindow(QMainWindow):
         self._build_left_panel()
         self._build_log_dock()
         self._build_solve_dock()
+        self._source_changed()
         self.statusBar().showMessage("Ready")
 
         if snapshot is not None:
@@ -122,21 +127,20 @@ class MainWindow(QMainWindow):
             tb.addAction(a)
             return a
 
-        src = self._source
-        self.act_reload = act(f"Load from {src.name}" if src else "Load",
-                              self.reload_board,
-                              f"Re-read the board from {src.description}" if src
-                              else "Re-read the board")
-        self.act_reload.setVisible(src is not None and src.caps.reload)
+        # Reload and Refill zones follow the board's source (see _source_changed). As a
+        # plugin the board comes from KiCad, and snapshots open beside it; standalone,
+        # Open reads a board file and Reload reads it again.
+        if self.host is Host.STANDALONE:
+            act("Open…", self.open_board, "Open a board file: " +
+                ", ".join(f.name for f in registry.FORMATS))
+        self.act_reload = act("Reload", self.reload_board, "Re-read the board")
         self.chk_refill = QCheckBox("Refill zones", self)
-        self.chk_refill.setToolTip(f"Refill all zones in {src.name if src else 'the editor'} "
-                                   "before reading (recommended)")
         # A toolbar widget is shown and hidden through the action holding it.
         self._act_refill = tb.addWidget(self.chk_refill)
-        self._act_refill.setVisible(src is not None and src.caps.refill_zones)
         tb.addSeparator()
-        act("Open snapshot…", self.open_snapshot,
-            "Load a saved board snapshot (.json / .json.gz), without KiCad running")
+        if self.host is Host.PLUGIN:
+            act("Open snapshot…", self.open_snapshot,
+                "Load a saved board snapshot (.json / .json.gz), without KiCad running")
         self.act_save = act("Save snapshot…", self.save_snapshot,
                             "Save the extracted board for offline use")
         tb.addSeparator()
@@ -339,6 +343,7 @@ class MainWindow(QMainWindow):
             cb.toggled.connect(lambda v, n=name: self.viewer.set_feature_visible(n, v))
             feats.addWidget(cb)
         self.chk_models = cb
+        self.chk_models.setVisible(self._tool.offers_part_models)
         self.chk_models.toggled.connect(lambda _: self._model_timer.start())
         # The copper and result views each keep their own Models setting.
         self.viewer.result_shown.connect(
@@ -372,13 +377,9 @@ class MainWindow(QMainWindow):
         self.info.setOpenExternalLinks(False)
         self.info.setToolTip("What you last clicked in the 3D view, or the impedance "
                              "plot's cursor values")
-        src = self._source
-        self.btn_select = QPushButton(f"Select in {src.name}" if src else "Select", g_info)
+        self.btn_select = QPushButton("Select", g_info)
         self.btn_select.setEnabled(False)
-        self.btn_select.setToolTip("Select the picked pad or via in "
-                                   f"{src.description if src else 'the editor'}")
         self.btn_select.clicked.connect(self._select_in_source)
-        self.btn_select.setVisible(src is not None and src.caps.select_items)
         li.addWidget(self.info, 1)
         li.addWidget(self.btn_select)
 
@@ -560,6 +561,50 @@ class MainWindow(QMainWindow):
             self._task.progress.cancel()
 
     # ===================================================== board loading
+    def _set_title(self, text: str):
+        self.setWindowTitle(f"KiPI {__version__} — {text}"
+                            + (" (standalone)" if self.host is Host.STANDALONE else ""))
+
+    def _source_changed(self):
+        """Show what the board's source can do (Reload, Refill zones, Select), named
+        after it: "Load from KiCad" as a plugin, "Reload" for a file."""
+        src = self._source
+        if src is not None and self.host is Host.PLUGIN:
+            self.act_reload.setText(f"Load from {src.name}")
+        else:
+            self.act_reload.setText("Reload")
+        self.act_reload.setToolTip(f"Re-read the board from {src.description}" if src
+                                   else "Re-read the board")
+        self.act_reload.setVisible(src is not None and src.caps.reload)
+        self.chk_refill.setToolTip(f"Refill all zones in {src.name if src else 'the editor'} "
+                                   "before reading (recommended)")
+        self._act_refill.setVisible(src is not None and src.caps.refill_zones)
+        self.btn_select.setText(f"Select in {src.name}" if src else "Select")
+        self.btn_select.setToolTip("Select the picked pad or via in "
+                                   f"{src.description if src else 'the editor'}")
+        self.btn_select.setVisible(src is not None and src.caps.select_items)
+
+    def open_board(self):
+        """Standalone: open a board file, which Reload then reads again."""
+        path, _ = QFileDialog.getOpenFileName(self, "Open board", "", registry.file_filter())
+        if path:
+            self.open_path(path)
+
+    def open_path(self, path):
+        """Read the board file ``path``; it becomes the source once it has been read."""
+        try:
+            source = registry.open_board(path)
+        except ValueError as e:
+            QMessageBox.warning(self, "KiPI", str(e))
+            return
+
+        def done(snap):
+            self._source = source
+            self._source_changed()
+            self._set_snapshot(snap)
+
+        self._run(lambda progress: source.load(progress), done, "Opening board")
+
     def reload_board(self):
         """Read the board from the source again (Load from KiCad)."""
         source = self._source
@@ -613,7 +658,7 @@ class MainWindow(QMainWindow):
         self._model_source = None
         self._picked = None
         self.btn_select.setEnabled(False)
-        self.setWindowTitle(f"KiPI {__version__} — {snap.board_name}")
+        self._set_title(snap.board_name)
         self._load_layer_colors(snap)
         self._populate_layers()
         self._result = None
@@ -1118,7 +1163,7 @@ class MainWindow(QMainWindow):
         if self.snapshot is None:
             # The tables and probing need the board (pads, layers); results files hold
             # only the solution.
-            QMessageBox.information(self, "KiPI", "Load the board (from KiCad or a snapshot) "
+            QMessageBox.information(self, "KiPI", "Load or open the board "
                                                   "before opening its results.")
             return
         if self.mode == "ac":

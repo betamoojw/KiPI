@@ -64,6 +64,7 @@ class ModelProvider(ABC):
 class InstalledTool:
     """No design tool to borrow from: KiPI's own colors and no part models."""
     name: str = ""
+    offers_part_models: bool = False   # False hides the part models from the view
 
     def layer_colors(self, snap: BoardSnapshot) -> Tuple[Dict[str, RGB], str]:
         """Copper colors by theme key, and where they came from (for the log). Never

@@ -20,6 +20,7 @@ from qtpy.QtWidgets import (
 )
 
 from kipi import __version__
+from kipi.host import current as current_host
 
 NAME = "KiPI"
 DESCRIPTION = ("Power integrity analysis for KiCad: DC IR drop, current density, "
@@ -57,7 +58,8 @@ def animated_icon_path() -> Optional[Path]:
 def versions(solver: bool = True) -> List[Tuple[str, str]]:
     """Python and the dependency versions; ``solver`` adds the direct solver backend,
     which imports the solver stack (slow the first time)."""
-    rows = [("Python", f"{platform.python_version()} ({sys.platform})")]
+    rows = [("Mode", current_host().label),
+            ("Python", f"{platform.python_version()} ({sys.platform})")]
     for dist in _DEPS:
         try:
             rows.append((dist, metadata.version(dist)))
