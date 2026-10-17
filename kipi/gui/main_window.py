@@ -451,6 +451,7 @@ class MainWindow(QMainWindow):
         self.solve_panel = PIPanel(self)
         self.solve_panel.solve_requested.connect(self.run_solve)
         self.solve_panel.field_changed.connect(self._field_changed)
+        self.solve_panel.scale_changed.connect(self._scale_changed)
         self.solve_panel.group_changed.connect(self._show_group)
         # Picking the group already selected sends no group_changed; after "Show copper"
         # that pick is how the results come back.
@@ -462,6 +463,7 @@ class MainWindow(QMainWindow):
         self.solve_panel.export_requested.connect(self._export)
         self._tree = None
         self._scenes = {}
+        self._shown_group = ""
         self._setup_path = None
         self.ac_panel = ACPanel(self)
         self.ac_panel.save_requested.connect(self._save_setup)
@@ -1433,7 +1435,11 @@ class MainWindow(QMainWindow):
         if not self._tree or name not in self._scenes:
             return
         self._result = self._tree.groups[name].result
-        self.viewer.show_result(self._scenes[name], self.solve_panel.current_field())
+        field = self.solve_panel.current_field()
+        self.viewer.show_result(self._scenes[name], field,
+                                limits=self.solve_panel.color_limits(name, field))
+        self._shown_group = name
+        self._sync_scale()
 
     def _group_activated(self, index: int):
         if self.viewer.result is None:
@@ -1444,7 +1450,22 @@ class MainWindow(QMainWindow):
         if self.viewer.result is None:
             self._show_group(self.solve_panel.cmb_group.currentText())
         else:
-            self.viewer.set_result_field(field)
+            self.viewer.set_result_field(
+                field, limits=self.solve_panel.color_limits(self._shown_group, field))
+            self._sync_scale()
+
+    def _scale_changed(self, limits):
+        """Color limits typed in the Results pane (None: the result's whole range)."""
+        if self.viewer.result is not None:
+            self.viewer.set_color_limits(limits)
+            self._sync_scale()
+
+    def _sync_scale(self):
+        """Show the color range drawn in the Results pane's scale fields."""
+        rng = self.viewer.color_range()
+        if rng:
+            self.solve_panel.show_scale(self._shown_group, self.solve_panel.current_field(),
+                                        *rng)
 
     def _show_geometry(self):
         self.viewer.clear_result()

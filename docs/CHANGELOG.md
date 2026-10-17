@@ -102,6 +102,9 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   the rail, works with remote sense, multi-phase VRMs and negative rails, and shows in the
   Notes tab, the power tree diagram, the HTML report and the VRM CSV (**V target**). Drops
   are still measured from the set voltage, so the droop counts against load tolerances.
+- Editable **color scale** limits (#101). The Results pane has a minimum and maximum for the
+  3D color scale, starting on the result's whole range; typed limits are kept per net group
+  and field (temperature limits for every group) until **Auto**.
 
 ### Changed
 - `python -m kipi` with no arguments starts standalone instead of connecting to the running
@@ -117,6 +120,11 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   every dielectric's k.
 - The Airflow tooltip and help say the air flows parallel to the board in a fixed direction,
   cooling every point equally (#98).
+- The 3D color bar sits against the right edge of the view, leaving a small gap, so it
+  covers less of the board; its title ends at the bar's right edge so long titles stay in
+  view (#103).
+- Hiding copper layers no longer rescales the result colors: the scale covers every layer
+  until you set its limits (#101).
 
 ### Internal
 - Board sources are kept apart from the rest of KiPI. `kipi/sources/` holds where boards

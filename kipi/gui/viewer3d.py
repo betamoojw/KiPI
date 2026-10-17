@@ -16,7 +16,7 @@ from qtpy.QtCore import Signal
 from qtpy.QtWidgets import QVBoxLayout, QWidget
 
 from kipi.core.viz.batch import Chunk, MeshBatcher
-from kipi.dc.viz.results import FIELDS, ResultScene, flat_arrows
+from kipi.dc.viz.results import FIELDS, ResultScene, flat_arrows, scale_decimals
 from kipi.core.viz.meshes import NetScene
 
 _NET_COLORS = [(0.90, 0.35, 0.25), (0.25, 0.60, 0.90), (0.95, 0.75, 0.20), (0.40, 0.80, 0.45),
@@ -55,24 +55,59 @@ def _bar_format(lo: float, hi: float, log_scale: bool) -> str:
     step_decimals = max(0, int(np.ceil(-np.log10(span / 5))) + 1)
     if max(abs(lo), abs(hi)) >= 1e4 or step_decimals > 9:
         return "%.4g"
-    return f"%.{step_decimals}f"
+    return f"%.{scale_decimals(lo, hi)}f"
+
+
+# The scale bar sits against the view's right edge (next to the setup panes), leaving a
+# small gap, so it covers as little of the board as it can.
+_BAR_RIGHT = 0.975
+_BAR_WIDTH = 0.05
+_BAR_Y, _BAR_HEIGHT = 0.25, 0.5
 
 
 def _bar_args(title: str, fmt: str) -> dict:
-    return dict(title=title, vertical=True, position_x=0.88, position_y=0.25, height=0.5,
-                width=0.05, fmt=fmt, title_font_size=14, color="white", label_font_size=12,
-                n_labels=6)
+    return dict(title=title, vertical=True, position_x=_BAR_RIGHT - _BAR_WIDTH,
+                position_y=_BAR_Y, height=_BAR_HEIGHT, width=_BAR_WIDTH, fmt=fmt,
+                title_font_size=14, color="white", label_font_size=12, n_labels=6)
 
 
-def _copper_clim(scene: ResultScene, field: str, hidden=()) -> Tuple[float, float, bool]:
-    """Color limits ``(lo, hi, log_scale)`` for a copper field over the layers not in
-    ``hidden``, so hiding a layer with an outlier spreads the scale over what is left.
-    With every layer hidden the scale covers all of them."""
+def _bar_title_actor(title: str):
+    """The bar's title, drawn apart from the bar and ending at its right edge: VTK centers
+    a bar's own title over the bar, which pushes a long one off the edge of the view."""
+    from vtkmodules.vtkRenderingCore import vtkTextActor
+    actor = vtkTextActor()
+    actor.SetInput(title)
+    prop = actor.GetTextProperty()
+    prop.SetFontSize(14)
+    prop.SetColor(1.0, 1.0, 1.0)
+    prop.SetJustificationToRight()
+    prop.SetVerticalJustificationToBottom()
+    actor.GetPositionCoordinate().SetCoordinateSystemToNormalizedViewport()
+    actor.SetPosition(_BAR_RIGHT, _BAR_Y + _BAR_HEIGHT - 0.012)   # just over the bar
+    actor.SetPickable(False)
+    return actor
+
+
+def apply_limits(lo: float, hi: float, log_scale: bool,
+                 limits: Optional[Tuple[float, float]]) -> Tuple[float, float]:
+    """The color range drawn: ``limits`` (min, max) typed by the user in place of the
+    automatic ``lo``..``hi``. A log scale cannot start at or below zero, so a minimum
+    there falls back to four decades below the maximum."""
+    if limits is not None:
+        lo, hi = (float(x) for x in limits)
+    if hi <= lo:
+        hi = lo + 1e-12
+    if log_scale and lo <= 0:
+        lo = max(hi * 1e-4, 1e-30)
+    return lo, hi
+
+
+def _copper_clim(scene: ResultScene, field: str) -> Tuple[float, float, bool]:
+    """Automatic color limits ``(lo, hi, log_scale)`` for a copper field over every
+    layer, whichever are shown (the user sets the limits to look closer)."""
     arr, assoc, _, _ = FIELDS[field]
-    shown = ([lr for lid, lr in scene.layers.items() if lid not in hidden]
-             or list(scene.layers.values()))
     data = [(lr.mesh.point_data if assoc == "point" else lr.mesh.cell_data)[arr]
-            for lr in shown]
+            for lr in scene.layers.values()]
     vals = np.concatenate([d[np.isfinite(d)] for d in data]) if data else np.zeros(0)
     if not len(vals):
         lo, hi = scene.ranges[field]
@@ -255,6 +290,9 @@ class Viewer3D(QWidget):
         self._result_actors: Dict[int, object] = {}      # layer id -> actor
         self._result_via_actor = None
         self._scalar_bars: List[str] = []
+        self._bar_titles: list = []
+        self._color_limits: Optional[Tuple[float, float]] = None   # user's, or automatic
+        self._clim: Optional[Tuple[float, float]] = None           # the range drawn
         self._arrows_on = False
         self._arrow_actors: Dict[int, object] = {}          # layer id -> actor
         # Clicks are handled here rather than with pyvista's point picking, so a click can
@@ -468,7 +506,6 @@ class Viewer3D(QWidget):
 
     def set_layer_visible(self, layer_id: int, visible: bool):
         (self._hidden_layers.discard if visible else self._hidden_layers.add)(layer_id)
-        self._rescale_result()
         self._apply_visibility()
 
     def set_feature_visible(self, feature: str, visible: bool):
@@ -592,19 +629,34 @@ class Viewer3D(QWidget):
     def result(self) -> Optional[ResultScene]:
         return self._result
 
-    def show_result(self, scene: ResultScene, field: Optional[str] = None):
-        """Replace the copper view with solver results colored by ``field``."""
+    def show_result(self, scene: ResultScene, field: Optional[str] = None,
+                    limits: Optional[Tuple[float, float]] = None):
+        """Replace the copper view with solver results colored by ``field``, over the color
+        range ``limits`` (min, max), or the field's whole range when None."""
         self._clear_result_actors()
         self._set_result(scene)
         if field is not None:
             self._result_field = field
+        self._color_limits = limits
         self._draw_result()
 
-    def set_result_field(self, field: str):
+    def set_result_field(self, field: str, limits: Optional[Tuple[float, float]] = None):
         self._result_field = field
+        self._color_limits = limits
         if self._result is not None:
             self._clear_result_actors()
             self._draw_result()
+
+    def set_color_limits(self, limits: Optional[Tuple[float, float]]):
+        """Color the result over ``limits`` (min, max), or its whole range when None."""
+        self._color_limits = limits
+        if self._result is not None:
+            self._clear_result_actors()
+            self._draw_result()
+
+    def color_range(self) -> Optional[Tuple[float, float]]:
+        """The color range the result is drawn over, or None with no result shown."""
+        return self._clim if self._result is not None else None
 
     def clear_result(self):
         self._clear_result_actors()
@@ -631,9 +683,12 @@ class Viewer3D(QWidget):
                 p.remove_scalar_bar(title, render=False)
             except (KeyError, ValueError, StopIteration):
                 pass
+        for actor in self._bar_titles:
+            p.renderer.RemoveViewProp(actor)
         self._result_actors.clear()
         self._result_via_actor = None
         self._scalar_bars.clear()
+        self._bar_titles.clear()
 
     def _draw_result(self):
         scene = self._result
@@ -693,7 +748,9 @@ class Viewer3D(QWidget):
     def _draw_copper_result(self, scene, arr, assoc, title):
         """Copper colored by a field; vias drawn plain for context."""
         p = self.plotter
-        lo, hi, log_scale = _copper_clim(scene, self._result_field, self._hidden_layers)
+        lo, hi, log_scale = _copper_clim(scene, self._result_field)
+        lo, hi = apply_limits(lo, hi, log_scale, self._color_limits)
+        self._clim = (lo, hi)
         cmap = "turbo" if assoc == "point" else "inferno"
         bar =_bar_args(title, _bar_format(lo, hi, log_scale))
         first = True
@@ -729,6 +786,8 @@ class Viewer3D(QWidget):
         lo, hi = scene.ranges["via_current"]
         if hi <= lo:
             hi = lo + 1e-9
+        lo, hi = apply_limits(lo, hi, False, self._color_limits)
+        self._clim = (lo, hi)
         self._result_via_actor = p.add_mesh(
             scene.vias, scalars=arr, cmap="viridis", clim=(lo, hi), specular=0.4,
             show_scalar_bar=True, name="result:vias", reset_camera=False, render=False,
@@ -736,30 +795,20 @@ class Viewer3D(QWidget):
         self._result_via_actor.SetScale(1.0, 1.0, self._zscale)
         self._style_bar(title)
 
-    def _rescale_result(self):
-        """Refit the copper color scale to the layers now shown."""
-        scene = self._result
-        if scene is None or FIELDS[self._result_field][1] == "via" or not self._result_actors:
-            return
-        lo, hi, log_scale = _copper_clim(scene, self._result_field, self._hidden_layers)
-        for actor in self._result_actors.values():
-            mapper = actor.GetMapper()
-            mapper.SetScalarRange(lo, hi)
-            mapper.GetLookupTable().SetRange(lo, hi)
-        bars = self.plotter.scalar_bars
-        for title in self._scalar_bars:
-            if title in bars:
-                bars[title].SetLabelFormat(_bar_format(lo, hi, log_scale))
-
     def _style_bar(self, title):
         """Tick values to the left of the bar, where they stay inside the view, and the
-        title lifted clear of the top value."""
+        title above the bar, ending at its right edge."""
         self._scalar_bars.append(title)
         bars = self.plotter.scalar_bars
         if title in bars:
             bar = bars[title]
             bar.SetTextPositionToPrecedeScalarBar()
             bar.SetVerticalTitleSeparation(12)
+            # pyvista keys the bar by its title, so the title is kept but not drawn.
+            bar.GetTitleTextProperty().SetOpacity(0.0)
+            actor = _bar_title_actor(title)
+            self.plotter.renderer.AddViewProp(actor)
+            self._bar_titles.append(actor)
 
     # ------------------------------------------------------------------ views
     def _fit(self, zoom: float = 1.0):

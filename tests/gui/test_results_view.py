@@ -48,11 +48,17 @@ def window(app, monkeypatch, tmp_path):
         def add_net(self, ns, render=True):
             self._nets.append(ns.net)
 
-        def show_result(self, scene, field=None):
-            self.result, self.field = scene, field or self.field
+        def show_result(self, scene, field=None, limits=None):
+            self.result, self.field, self.limits = scene, field or self.field, limits
 
-        def set_result_field(self, field):
-            self.field = field
+        def set_result_field(self, field, limits=None):
+            self.field, self.limits = field, limits
+
+        def set_color_limits(self, limits):
+            self.limits = limits
+
+        def color_range(self):
+            return (self.limits or (0.0, 1.0)) if self.result is not None else None
 
         def clear_result(self):
             self.result = None
@@ -138,3 +144,42 @@ def test_pads_are_identified_in_a_group_of_several_nets(app, window):
         window._on_pick((x, 0.5, z))
         text = window.info.toPlainText()
         assert f"Pad {label}" in text and f"Net: {net}" in text
+
+
+def test_color_scale_limits_are_typed_kept_and_reset(app, window):
+    # #101: the Results pane's scale fields set the 3D color range, per group and field.
+    snap, s = _bridged_board()
+    tree, first = _solved(app, window, snap, s)
+    view, panel = window.viewer, window.solve_panel
+    assert view.limits is None and panel.spin_scale_min.isEnabled()
+    assert not panel.btn_scale_auto.isEnabled()
+    panel.spin_scale_max.setValue(5.0)
+    panel.spin_scale_min.setValue(2.0)
+    assert view.limits == (2.0, 5.0) and panel.btn_scale_auto.isEnabled()
+    assert panel.spin_scale_min.suffix() == " V"
+
+    panel.cmb_field.setCurrentIndex(panel.cmb_field.findData("current_density"))
+    assert view.limits is None                    # another field starts on its whole range
+    assert panel.spin_scale_min.suffix() == " A/mm²"
+    other = next(n for n in tree.groups if n != first)
+    panel.cmb_group.setCurrentText(other)
+    panel.cmb_field.setCurrentIndex(panel.cmb_field.findData("voltage"))
+    assert view.limits is None                    # and so does another group
+    panel.cmb_group.setCurrentText(first)
+    assert view.limits == (2.0, 5.0)              # kept for the group and field set
+    assert panel.spin_scale_min.value() == 2.0
+
+    panel.spin_scale_min.setValue(6.0)            # above the maximum: not a range
+    assert view.limits == (2.0, 5.0)
+    panel.btn_scale_auto.click()
+    assert view.limits is None and panel.color_limits(first, "voltage") is None
+    assert not panel.btn_scale_auto.isEnabled()
+
+
+def test_temperature_limits_are_shared_by_every_group(app, window):
+    panel = window.solve_panel
+    panel._scale_key = panel._limits_key("a", "temperature")
+    panel.spin_scale_max.setValue(80.0)
+    panel.spin_scale_min.setValue(25.0)
+    assert panel.color_limits("b", "temperature") == (25.0, 80.0)
+    assert panel.color_limits("b", "voltage") is None

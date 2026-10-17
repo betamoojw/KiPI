@@ -522,8 +522,8 @@ moment; nets appear as they finish, and <b>Cancel</b> stops the build.</p>
 <div class="body">
 <p>Each copper layer with its thickness and height in the stackup. Untick a layer to hide it;
 <b>All</b> and <b>None</b> show or hide every layer at once.
-Hiding layers also rescales the result colors: the color scale only covers the layers that
-are shown, so one layer's outlier does not wash out the others.</p>
+Hiding layers does not change the result colors; set the
+<a href="#color-scale">color scale</a> to look closer.</p>
 </div>
 </details>
 
@@ -933,6 +933,13 @@ color the copper in 3D.</p>
 <p><b>Show copper</b> returns to the plain geometry; pick a group or field again to bring the
 results back. Click anywhere to probe: Info shows the exact value at that point (not
 clipped).</p>
+<p id="color-scale"><b>Color scale</b>: the minimum and maximum of the colors, under the
+group and field. Each result starts on its whole range, over every layer whether shown or
+not. Type limits (or step them with the arrows) to stretch the colors over the part you care
+about; values outside take the end colors. Limits are kept for each net group and field
+until <b>Auto</b> fits the whole range again; temperature limits apply to every group, so an
+ambient-to-limit scale stays put while you switch groups. On the logarithmic power-density
+scale, a minimum of zero or below falls back to four decades below the maximum.</p>
 <div class="pair">
 <figure><img src="images/voltage.png" alt="Voltage across a plane"><figcaption>Voltage.</figcaption></figure>
 <figure><img src="images/current_density.png" alt="Current density with arrows"><figcaption>Current density with arrows.</figcaption></figure>
@@ -994,7 +1001,8 @@ clipped).</p>
     ground return is solved; see <a href="#dc-concepts">drop and boost</a>.</li>
   <li><b>Worst pin</b> is the one furthest from the set point; with many pins, one far pin can
     fail a load whose average looks fine.</li>
-  <li>The color scale covers the shown layers only; untick layers to stretch it.</li>
+  <li>The color scale covers the whole result; type a minimum and maximum under it to look
+    closer.</li>
   <li>Losses are I²R in the copper; VRM conversion loss is the difference between input and
     output power.</li>
 </ul>

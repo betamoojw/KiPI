@@ -42,7 +42,7 @@ from kipi.dc.pi.model import (
 from kipi.gui.sortable import make_sortable, reset_sort, set_row, sorted_rows
 from kipi.gui.unit_spin import UnitSpinBox
 from kipi.dc.pi.tree import fmt_drop
-from kipi.dc.viz.results import FIELDS
+from kipi.dc.viz.results import FIELDS, scale_decimals
 
 NONE = "(none)"
 
@@ -994,6 +994,7 @@ def _unique(base: str, taken: List[str]) -> str:
 class PIPanel(QWidget):
     solve_requested = Signal(object)      # PISetup
     field_changed = Signal(str)
+    scale_changed = Signal(object)         # (min, max) of the color scale, or None: auto
     group_changed = Signal(str)
     show_geometry = Signal()
     save_requested = Signal()
@@ -1111,6 +1112,7 @@ class PIPanel(QWidget):
         row.addWidget(b_geom)
         row.addWidget(b_export)
         lr.addLayout(row)
+        lr.addLayout(self._scale_row(g_res))
         self.res_tabs = QTabWidget(g_res)
         self.tbl_loads = self._table(["Load", "Group", "I (A)", "V eff (V)",
                                       "Drop / boost (mV)", "Worst pin (mV)", "Worst %",
@@ -1169,6 +1171,78 @@ class PIPanel(QWidget):
         self.chk_arrows.setEnabled(on)
         self.chk_arrows.setToolTip("Show current-flow arrows over the copper" if on else
                                    "Current arrows are shown with Current density")
+
+    # ------------------------------------------------------------ color scale
+    def _scale_row(self, parent) -> QHBoxLayout:
+        """The 3D color scale's minimum and maximum (#101). Each starts at the result's
+        whole range; typed limits are kept per net group and field (temperature: per
+        field, as every group shares the board's temperature) until Auto."""
+        self._scale_limits: Dict[tuple, tuple] = {}
+        self._scale_key = None
+        row = QHBoxLayout()
+        self.lbl_scale = QLabel("Color scale", parent)
+        self.spin_scale_min = _spin(-1e15, 1e15, 0.0, 3, "")
+        self.spin_scale_max = _spin(-1e15, 1e15, 1.0, 3, "")
+        self.spin_scale_min.setToolTip("Lowest value of the 3D color scale: copper at or below "
+                                       "it takes the bottom color")
+        self.spin_scale_max.setToolTip("Highest value of the 3D color scale: copper at or above "
+                                       "it takes the top color")
+        for sp in (self.spin_scale_min, self.spin_scale_max):
+            sp.valueChanged.connect(self._scale_edited)
+        self.btn_scale_auto = QPushButton("Auto", parent)
+        self.btn_scale_auto.setToolTip("Fit the color scale to the whole result again")
+        self.btn_scale_auto.clicked.connect(self._scale_auto)
+        row.addWidget(self.lbl_scale)
+        row.addWidget(self.spin_scale_min, 1)
+        row.addWidget(QLabel("to", parent))
+        row.addWidget(self.spin_scale_max, 1)
+        row.addWidget(self.btn_scale_auto)
+        self._enable_scale(False)
+        return row
+
+    @staticmethod
+    def _limits_key(group: str, field: str) -> tuple:
+        return (None if field == "temperature" else group), field
+
+    def color_limits(self, group: str, field: str) -> Optional[tuple]:
+        """The color scale (min, max) typed for this group and field, or None for the
+        result's whole range."""
+        return self._scale_limits.get(self._limits_key(group, field))
+
+    def show_scale(self, group: str, field: str, lo: float, hi: float):
+        """Show the color range the 3D view draws ``field`` of ``group`` over."""
+        self._scale_key = self._limits_key(group, field)
+        unit = FIELDS[field][3]
+        decimals = scale_decimals(lo, hi)
+        for sp, v in ((self.spin_scale_min, lo), (self.spin_scale_max, hi)):
+            sp.blockSignals(True)
+            sp.setSuffix(f" {unit}")
+            sp.setShownDecimals(decimals)
+            sp.setSingleStep(max(abs(hi - lo) / 10, 10.0 ** -decimals))
+            sp.setValue(v)
+            sp.blockSignals(False)
+        self._enable_scale(True)
+        self.btn_scale_auto.setEnabled(self._scale_key in self._scale_limits)
+
+    def _enable_scale(self, on: bool):
+        for w in (self.lbl_scale, self.spin_scale_min, self.spin_scale_max,
+                  self.btn_scale_auto):
+            w.setEnabled(on)
+
+    def _scale_edited(self, *_):
+        if self._scale_key is None:
+            return
+        lo, hi = self.spin_scale_min.value(), self.spin_scale_max.value()
+        if hi <= lo:
+            return              # not a range yet: wait for the other end
+        self._scale_limits[self._scale_key] = (lo, hi)
+        self.btn_scale_auto.setEnabled(True)
+        self.scale_changed.emit((lo, hi))
+
+    def _scale_auto(self):
+        if self._scale_limits.pop(self._scale_key, None) is not None:
+            self.scale_changed.emit(None)
+        self.btn_scale_auto.setEnabled(False)
 
     def _thermal_results_tab(self) -> QWidget:
         w = QWidget()
@@ -1531,6 +1605,9 @@ class PIPanel(QWidget):
         self.snapshot = snap
         self.setup = setup
         self.lbl_file.setText(file_label)
+        self._scale_limits.clear()
+        self._scale_key = None
+        self._enable_scale(False)
         for sp, v in ((self.spin_edge, setup.settings.max_edge_mm),
                       (self.spin_grading, setup.settings.grading),
                       (self.spin_plating, setup.settings.plating_mm * 1000)):

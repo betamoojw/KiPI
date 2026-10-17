@@ -430,10 +430,11 @@ solved, the ground under a load rises above 0 V, so a supply plane can read abov
 point even though a remotely sensed rail is exactly on target. The Loads tab's effective
 voltage (supply minus ground at the load) is the figure to compare with the load's voltage requirements.
 
-The color scale covers the copper layers that are shown: untick a layer under **Copper
-layers** and the colors stretch over the layers that remain, so one layer's outlier does not
-flatten the rest. (Current and power density clip at the 99.5th percentile, since pad corners
-spike; the probe still reports true values.)
+The color scale covers the whole result, on every layer. To look closer, type a minimum and
+maximum in the **Color scale** fields under the result field (for temperature, say ambient
+to your limit); values outside take the end colors. Limits are kept per net group and field
+(temperature: for every group) until **Auto**. (Automatic current and power density scales
+clip at the 99.5th percentile, since pad corners spike; the probe still reports true values.)
 
 Click any point on the copper or vias in the 3D results view to probe it: the Info box gives the voltage, its drop
 or boost from the VRM regulation voltage, current and power density, and the pad or via probed. **Show

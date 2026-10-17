@@ -11,6 +11,7 @@ KiCad's y axis is flipped (y -> -y) as everywhere else in the viewer.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -30,6 +31,15 @@ FIELDS = {
     "temperature": ("T", "point", "Temperature", "°C"),
     "via_current": ("I_mA", "via", "Via current", "mA"),
 }
+
+
+def scale_decimals(lo: float, hi: float) -> int:
+    """Decimals that tell apart six values spread over ``lo``..``hi``: a 3.3 V rail that
+    sags by 0.4 mV needs five, or every one reads "3.3"."""
+    span = abs(hi - lo)
+    if not span > 0 or not math.isfinite(span):
+        return 4
+    return min(9, max(0, int(np.ceil(-np.log10(span / 5))) + 1))
 
 
 @dataclass
