@@ -160,6 +160,12 @@ def test_legacy_pickles_still_hold_what_results_held(tmp_path):
     np.testing.assert_array_equal(back["a"], payload["a"])
 
 
+@pytest.mark.parametrize("module", ["pathlib", "pathlib._local"])     # 3.13 and later
+def test_paths_from_any_python_open(module):
+    blob = f"c{module}\nPurePosixPath\n(Vr.html\ntR.".encode()      # PurePosixPath("r.html")
+    assert compat.Unpickler(io.BytesIO(blob)).load() == Path("r.html")
+
+
 def test_a_windows_path_in_a_legacy_pickle_opens_anywhere():
     blob = pickle.dumps({"p": PureWindowsPath(r"C:\x\r.html")})
     # This machine's Path from the saved parts: C:\x\r.html on Windows, and no error

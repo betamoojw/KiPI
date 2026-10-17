@@ -75,7 +75,8 @@ class Unpickler(pickle.Unpickler):
 
     def find_class(self, module, name):
         module, name = moved(module, name)
-        if module == "pathlib" and name in _PATHS:
+        # Python 3.13 and later pickle paths as pathlib._local.
+        if module in ("pathlib", "pathlib._local") and name in _PATHS:
             from pathlib import Path        # a Windows path saved on Windows opens elsewhere
             return Path
         if (module, name) in _LEGACY_GLOBALS:
