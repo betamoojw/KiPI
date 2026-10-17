@@ -162,7 +162,9 @@ def test_legacy_pickles_still_hold_what_results_held(tmp_path):
 
 def test_a_windows_path_in_a_legacy_pickle_opens_anywhere():
     blob = pickle.dumps({"p": PureWindowsPath(r"C:\x\r.html")})
-    assert compat.Unpickler(io.BytesIO(blob)).load()["p"] == Path(r"C:\x\r.html")
+    # This machine's Path from the saved parts: C:\x\r.html on Windows, and no error
+    # elsewhere.
+    assert compat.Unpickler(io.BytesIO(blob)).load()["p"] == Path("C:\\", "x", "r.html")
 
 
 def _rewrite(path, change):
