@@ -40,9 +40,9 @@ KiPI runs two ways, from the same folder:
   folder**, and KiCad installs its dependencies.
 * **Standalone**: KiPI started on its own, with its launcher, opens board files and needs
   no KiCad. The folder can be **anywhere**; the launcher installs the dependencies on the
-  first start. For now it opens KiPI snapshots (`.kipi.json.gz`, saved from the plugin
-  with *Save snapshot…*). Reading KiCad `.kicad_pcb`, HYP and ODB++ files directly is on
-  the way ([#45](https://github.com/drewsum/KiPI/issues/45)).
+  first start. It opens KiCad 7 to 10 board files (`.kicad_pcb`) and KiPI snapshots
+  (`.kipi.json.gz`). Reading HYP and ODB++ files is on the way
+  ([#45](https://github.com/drewsum/KiPI/issues/45)).
 
 ### As a KiCad plugin
 
@@ -128,9 +128,17 @@ folder:
 away, and the launcher sets up again by itself when a new KiPI needs different packages.
 With no window available (no tkinter, or `--console`), setup asks in the terminal instead.
 
-KiPI's window title then ends in *(standalone)*. Use **Open…** to open a board and
-**Reload** to read it again after it changes. KiCad-only controls (*Load from KiCad*,
+KiPI's window title then ends in *(standalone)*. Use **Open…** to open a board (its arrow
+lists the boards opened lately) and **Reload** to read it again; when the board file is
+saved, KiPI offers to read it again by itself. KiCad-only controls (*Load from KiCad*,
 *Refill zones*, *Select in KiCad*, part 3D models) are hidden.
+
+A `.kicad_pcb` reads the same as the plugin reads it from KiCad: same copper, item ids and
+setup file, so a board set up in the plugin opens standalone with its setup, and the other
+way round. Net classes come from the `.kicad_pro` beside the board. KiPI uses the zone fills
+saved in the file and does not fill zones itself, so **fill the zones in KiCad (B) and save**
+before opening the board; zones saved unfilled are listed under *Placeholders* in the board
+summary. Files from KiCad 6 or older need saving once in KiCad 7 or later.
 
 To change the setup later, use **About → Manage dependencies…** in KiPI, or the launcher:
 
@@ -579,6 +587,7 @@ The tests also solve the example board and check that its committed setup still 
 | `kipi/sources/base.py` | What the window asks of a source (`BoardSource`: read, re-read, refill, select) and of a design tool on this computer (`InstalledTool`: layer colors, part models) |
 | `kipi/sources/registry.py` | The board files **Open…** reads, and which source reads each |
 | `kipi/sources/kicad_ipc/` | The running KiCad, through the IPC API (kipy): board extraction, zone refill, KiCad instance checks, color theme, 3D models through kicad-cli |
+| `kipi/sources/kicad_pcb/` | KiCad board files read without KiCad: S-expression parser, pad shapes cut as KiCad cuts them, the `.kicad_pro`'s net classes |
 | `kipi/sources/snapshot_file.py` | A saved snapshot as a source |
 | `kipi/dc/` | DC analysis: |
 | `kipi/dc/solver/` | 2.5D DC conduction FEM: sheet conductance, via/PTH barrels, series parts, sources, loads |

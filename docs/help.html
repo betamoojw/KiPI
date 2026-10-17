@@ -301,8 +301,14 @@ float them in their own windows.</p>
     kipi</code>, or the <code>kipi</code> command), it runs <b>standalone</b>: it opens
     board files with <b>Open…</b> and needs no KiCad. The title bar then ends in
     <i>(standalone)</i>, and the controls that need KiCad are hidden (see the
-    <a href="#toolbar">toolbar</a>). For now standalone opens KiPI snapshots
-    (<code>.kipi.json.gz</code>).</li>
+    <a href="#toolbar">toolbar</a>). Standalone opens KiCad board files
+    (<code>.kicad_pcb</code>) and KiPI snapshots (<code>.kipi.json.gz</code>).</li>
+  <li><b>KiCad board files.</b> A <code>.kicad_pcb</code> from KiCad 7 to 10 reads the
+    same as the plugin reads it from KiCad, so a board set up in the plugin opens standalone
+    with its setup. Net classes come from the <code>.kicad_pro</code> next to it. KiPI uses
+    the zone fills saved in the file and cannot refill them: <b>fill the zones in KiCad (B)
+    and save</b> before opening. Zones saved unfilled are listed under <b>Placeholders</b>
+    in the <a href="#info">board summary</a>.</li>
   <li><b>Standalone setup.</b> Start standalone KiPI with its launcher:
     double-click <code>kipi_launcher.pyw</code> (Windows) or run <code>python
     kipi_launcher.py</code>. The first start installs KiPI's packages into an environment
@@ -343,11 +349,12 @@ float them in their own windows.</p>
   <tr><td><b>Open snapshot…</b><br><small>plugin</small></td><td class="wrap">Opens a board
     saved with <b>Save snapshot…</b>. KiCad does not need to be running.</td></tr>
   <tr><td><b>Open…</b><br><small>standalone</small></td><td class="wrap">Opens a board file:
-    for now a KiPI snapshot (<code>.kipi.json.gz</code>). Its saved setup comes with it, as
-    with <b>Load from KiCad</b>.</td></tr>
+    a KiCad board (<code>.kicad_pcb</code>) or a KiPI snapshot (<code>.kipi.json.gz</code>).
+    Its saved setup comes with it, as with <b>Load from KiCad</b>. The arrow beside it lists
+    the boards opened lately.</td></tr>
   <tr><td><b>Reload</b><br><small>standalone</small></td><td class="wrap">Reads the open board
-    file again, for example after saving a new snapshot over it. Ticked nets stay
-    ticked.</td></tr>
+    file again. When the file is saved (in KiCad, say), KiPI asks whether to read it again
+    by itself. Ticked nets stay ticked.</td></tr>
   <tr><td><b>Save snapshot…</b></td><td class="wrap">Saves the extracted board as
     <code>.kipi.json.gz</code>, to analyze later, on another machine, or to attach to a bug
     report.</td></tr>
@@ -1382,6 +1389,18 @@ If the running programs cannot be listed, KiPI carries on.</p></div>
     picks up where it stopped. <code>python kipi_launcher.py --repair</code> starts over.</li>
   <li><b>A message box says to use a terminal:</b> that Python has no tkinter for the setup
     window. Run <code>python kipi_launcher.py</code> in a terminal and answer there.</li>
+</ul></div>
+</details>
+<details id="ts-kicad-file">
+<summary>A KiCad board file opens with copper missing, or not at all</summary>
+<div class="body"><ul>
+  <li><b>Zones have no copper:</b> they were saved unfilled, and KiPI does not fill zones.
+    Fill them in KiCad (<b>B</b>), save, and <b>Reload</b>. The board summary lists unfilled
+    zones under <b>Placeholders</b>.</li>
+  <li><b>Copper looks out of date:</b> KiCad fills zones when asked, not on every edit. Refill
+    and save in KiCad after moving copper.</li>
+  <li><b>"saved by KiCad 6 or older":</b> open the board in KiCad 7 or later, save it, and
+    open it again.</li>
 </ul></div>
 </details>
 <details>

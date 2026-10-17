@@ -18,8 +18,8 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   - The toolbar has **Open…** and **Reload** in place of *Load from KiCad*, *Refill zones*
     and *Open snapshot…*. *Select in KiCad* and the part *Models* box are hidden, and the
     copper uses KiPI's default layer colors.
-  - For now standalone opens KiPI snapshots (`.kipi.json.gz`). Reading `.kicad_pcb`, HYP and
-    ODB++ files comes next.
+  - Standalone opens KiPI snapshots (`.kipi.json.gz`) and KiCad board files (below).
+    Reading HYP and ODB++ files comes next.
   - The title bar says *(standalone)*, and the welcome screen and About show the mode.
   - The plugin and standalone KiPI each allow one window of their own, so an open
     standalone KiPI never takes over KiCad's KiPI button.
@@ -50,6 +50,20 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
     starts KiPI again afterwards.
   - `python -m kipi` in a Python without KiPI's packages says which are missing and to use
     the launcher, instead of a traceback.
+- **KiCad board files without KiCad.** Standalone **Open…** (and `python -m kipi
+  board.kicad_pcb`) reads KiCad 7 to 10 `.kicad_pcb` files directly, giving the same board as
+  the plugin reads from the running KiCad: the same stackup, copper, pad shapes and item ids,
+  so a setup made in the plugin opens with the file and the other way round.
+  - Every pad shape (round, rectangle, rounded and chamfered rectangle, oval, trapezoid,
+    custom), KiCad 9 padstacks with their own inner and back shapes, plated pads that drop
+    unconnected layers, blind and micro vias, arc tracks, copper drawings with a net, and
+    footprints on either side.
+  - Net classes come from the project's `.kicad_pro` (assigned nets and patterns).
+  - Zones are read as KiCad last filled them. A zone saved unfilled has no copper, and the
+    board summary's *Placeholders* says so; fill zones in KiCad (B) and save first.
+  - When the open board file is saved (in KiCad or anywhere), KiPI offers to read it again.
+  - **Open…** has a menu of the boards opened lately.
+  - Checked against the KiCad API on real boards: identical copper, and identical DC results.
 - **Where the board came from, and its placeholders.** The board summary in the Info box
   names the source ("From KiCad PCB editor 10.0.7") and the snapshot file it was opened from,
   and lists under *Placeholders* each value KiPI had to fill in because the source did not
@@ -78,6 +92,11 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   (`core/geometry/arcs.py`) and the default layer colors (`core/viz/layer_colors.py`).
   Results saved by earlier versions still open.
 - `kipi/host.py` says how KiPI was started; the entry points set it.
+- `kipi/sources/kicad_pcb/` is the board-file reader. Its tests compare it item by item with
+  the KiCad API's reading of a fixture board KiCad saved (`tests/data/kicad_pcb/`, made by
+  `make_fixtures.py`). The stroke, bezier and outline helpers both KiCad readers use moved
+  to `core/geometry/shapes.py`. Sources say which files they read (`BoardSource.files()`),
+  which the window watches.
 - `kipi/launcher/` is the launcher, standard library only (a test checks).
   `requirements-standalone.txt` is what it installs, and
   `.github/scripts/dep_sizes.py` writes the package list it shows offline
