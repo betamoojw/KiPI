@@ -29,17 +29,20 @@ def main() -> int:
     if instance is None:        # another KiPI is open; it was brought to the front
         return 0
     try:
+        # The welcome screen first, so the click in KiCad is answered at once (#55).
+        _app, splash = kipi_app.start_splash()
+        kipi_app.set_status(splash, "Connecting to KiCad…")
         try:
             kicad, board = connect(progress=ProgressReporter())
         except ExtractionError as e:
             from qtpy.QtWidgets import QMessageBox
-
-            from kipi.gui.identity import make_app
-            _app = make_app()  # must outlive the box
+            if splash is not None:
+                splash.close()
             QMessageBox.critical(None, "KiPI", f"{e}\n\nLog: {kipi_app.LOG_PATH}")
             return 1
         source = KiCadLiveSource(kicad, board)
-        return run(source=source, tool=InstalledKiCad(source), instance=instance)
+        return run(source=source, tool=InstalledKiCad(source), instance=instance,
+                   splash=splash)
     finally:
         instance.release()
 

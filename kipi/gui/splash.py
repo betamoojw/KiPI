@@ -1,9 +1,11 @@
 """The welcome screen shown while KiPI starts: the animated logo, the version and what it
 is running on.
 
-It closes itself once the logo has played through one loop (or after a few seconds if
-only the still logo can be shown), so it never waits for the user; a click closes it
-sooner. It is cosmetic: if it cannot be shown, KiPI starts without it.
+It is the first thing KiPI shows, before the slow part of starting (#55), and says what
+KiPI is doing meanwhile. Once the main window is open it closes itself when the logo has
+played through one loop (or after a few seconds if only the still logo can be shown), so
+it never waits for the user; a click closes it sooner. It is cosmetic: if it cannot be
+shown, KiPI starts without it.
 """
 
 from __future__ import annotations
@@ -89,18 +91,40 @@ class Splash(QWidget):
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.setInterval(show_ms)
-        self.timer.timeout.connect(self.close)
+        self.timer.timeout.connect(self._time_up)
         self._looped_from = None
+        self._held = False
+        self._due = False       # its time was up while held
         if self.movie is not None:
             self.movie.frameChanged.connect(self._on_frame)
-            self.movie.finished.connect(self.close)    # a GIF that does not repeat
+            self.movie.finished.connect(self._time_up)    # a GIF that does not repeat
 
     def _on_frame(self, n: int) -> None:
         """Close when the logo wraps back to its first frame: one full loop played."""
         if n > 0:
             self._looped_from = n
         elif self._looped_from is not None:
+            self._time_up()
+
+    def _time_up(self) -> None:
+        if self._held:
+            self._due = True
+        else:
             self.close()
+
+    def hold(self) -> None:
+        """Stay open, however long, until :meth:`release` (while KiPI is still starting)."""
+        self._held = True
+
+    def release(self) -> None:
+        """Close now if the splash's time is up, or else when it is."""
+        self._held = False
+        if self._due:
+            self.close()
+
+    def set_status(self, text: str) -> None:
+        self.status.setText(text)
+        self.status.repaint()
 
     def _animate(self, label: QLabel) -> Optional[QMovie]:
         """Play the animated logo, or None to fall back to the still one (the GIF can be

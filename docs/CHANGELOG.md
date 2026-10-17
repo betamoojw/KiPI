@@ -125,6 +125,13 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   view (#103).
 - Hiding copper layers no longer rescales the result colors: the scale covers every layer
   until you set its limits (#101).
+- KiPI answers its toolbar button at once (#55). The welcome screen now comes up first and
+  says what KiPI is doing (connecting to KiCad, loading its packages, opening the window)
+  until the window is open, instead of appearing only after everything has loaded. The
+  packages load on a thread, so it keeps animating. The first start after a reboot or
+  after KiCad starts can still take a while, since thousands of files are read from a
+  cold disk (16 s on one Windows machine, 1 s once cached), and the log records how long
+  each part took.
 - KiPI's window comes to the front when it opens, instead of behind KiCad (#112). On
   Windows it takes the foreground from KiCad, and, if Windows refuses, it still opens on top
   of the other windows. It stays in front after the welcome screen closes, unless you have
