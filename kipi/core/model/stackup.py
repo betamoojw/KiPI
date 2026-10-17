@@ -3,7 +3,7 @@ or a default one when the file does not give a complete stackup."""
 
 from __future__ import annotations
 
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from kipi.core.model.board import CopperLayer, DielectricLayer, Stackup
 from kipi.core.progress import NULL, ProgressReporter
@@ -11,6 +11,11 @@ from kipi.core.progress import NULL, ProgressReporter
 DEFAULT_BOARD_THICKNESS_MM = 1.6
 DEFAULT_OUTER_CU_MM = 0.035
 DEFAULT_INNER_CU_MM = 0.0175
+
+#: Said of a board whose own stackup could not be used (BoardSnapshot.assumed).
+DEFAULT_STACKUP_NOTE = (f"Stackup: the board's own is incomplete, so a default "
+                        f"{DEFAULT_BOARD_THICKNESS_MM} mm stackup is used (1 oz outer and "
+                        "1/2 oz inner copper, FR4 between)")
 
 # One stackup layer, top to bottom: ("cu", copper layer id, thickness_mm, "", 0.0) or
 # ("diel", -1, thickness_mm, material, epsilon_r).
@@ -32,14 +37,17 @@ def default_entries(cu_ids: Sequence[int]) -> List[Entry]:
 
 
 def build_stackup(entries: Sequence[Entry], cu_ids: Sequence[int], names: Dict[int, str],
-                  progress: ProgressReporter = NULL) -> Stackup:
+                  progress: ProgressReporter = NULL,
+                  assumed: Optional[List[str]] = None) -> Stackup:
     """The stackup of ``entries`` (top to bottom), or the default stackup for ``cu_ids``
-    when ``entries`` does not hold every copper layer. ``names`` maps layer id to the name
-    shown for it."""
+    when ``entries`` does not hold every copper layer (said in ``assumed``). ``names`` maps
+    layer id to the name shown for it."""
     from_board = sum(1 for e in entries if e[0] == "cu") == len(cu_ids) and len(cu_ids) > 0
     if not from_board:
         progress.warn("Stackup incomplete; synthesizing a default "
                       f"{DEFAULT_BOARD_THICKNESS_MM} mm stackup")
+        if assumed is not None:
+            assumed.append(DEFAULT_STACKUP_NOTE)
         entries = default_entries(cu_ids)
 
     total = sum(e[2] for e in entries)

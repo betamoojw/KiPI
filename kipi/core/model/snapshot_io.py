@@ -32,6 +32,7 @@ def _round(obj: Any) -> Any:
 
 def to_dict(snap: BoardSnapshot) -> Dict[str, Any]:
     d = _round(dataclasses.asdict(snap))
+    d.pop("file")             # where this copy was read from says nothing about the board
     # JSON object keys must be strings; layer-keyed dicts are converted back on load.
     for pad in d["pads"]:
         pad["shapes"] = {str(k): v for k, v in pad["shapes"].items()}
@@ -85,6 +86,10 @@ def from_dict(d: Dict[str, Any]) -> BoardSnapshot:
         outline=[_poly(p) for p in d["outline"]],
         source=d.get("source", "snapshot"),
         kicad_version=d.get("kicad_version", ""),
+        # Snapshots from before 0.8.0 do not say; theirs all came from the running KiCad.
+        source_format=d.get("source_format") or ("kicad-ipc" if d.get("source") == "kicad"
+                                                 else ""),
+        assumed=list(d.get("assumed", [])),
     )
 
 
@@ -107,5 +112,5 @@ def load(path) -> BoardSnapshot:
     else:
         d = json.loads(path.read_text(encoding="utf-8"))
     snap = from_dict(d)
-    snap.source = str(path)
+    snap.file = str(path)
     return snap

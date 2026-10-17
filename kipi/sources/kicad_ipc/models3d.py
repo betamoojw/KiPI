@@ -100,8 +100,8 @@ def board_file(snap: BoardSnapshot) -> Optional[Path]:
     if not name.endswith(".kicad_pcb"):
         return None
     dirs = [snap.project_dir]
-    if snap.source and snap.source != "kicad":
-        dirs.append(str(Path(snap.source).parent))     # a snapshot saved next to its board
+    if snap.file:
+        dirs.append(str(Path(snap.file).parent))       # a snapshot saved next to its board
     for d in filter(None, dirs):
         path = Path(d) / name
         if path.is_file():

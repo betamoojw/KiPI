@@ -115,7 +115,8 @@ def _stackup_copper(stackup_layers) -> Dict[int, str]:
             and sl.type == board_pb2.BoardStackupLayerType.BSLT_COPPER}
 
 
-def _copper_layer_ids(board, stackup_layers=(), progress: ProgressReporter = NULL) -> List[int]:
+def _copper_layer_ids(board, stackup_layers=(), progress: ProgressReporter = NULL,
+                      assumed: Optional[List[str]] = None) -> List[int]:
     from kipy.util.board_layer import is_copper_layer
     from kipy.proto.board.board_types_pb2 import BoardLayer
     try:
@@ -127,6 +128,9 @@ def _copper_layer_ids(board, stackup_layers=(), progress: ProgressReporter = NUL
         ids = [l for l in _stackup_copper(stackup_layers) if is_copper_layer(l)]
         if not ids:
             progress.warn("This KiCad cannot list the board's layers; assuming 2 copper layers")
+            if assumed is not None:
+                assumed.append("Copper layers: this KiCad cannot list the board's layers, "
+                               "so it is taken to have 2 (F.Cu and B.Cu)")
             ids = [BoardLayer.BL_F_Cu, BoardLayer.BL_B_Cu]
     # Stack order: F.Cu, In1..In30, B.Cu. Enum values are already in that order.
     return sorted(ids, key=lambda l: (l == BoardLayer.BL_B_Cu, l))
@@ -148,7 +152,9 @@ def _layer_names(board, cu_ids, stackup_layers) -> Dict[int, str]:
     return names
 
 
-def extract_stackup(board, progress: ProgressReporter = NULL) -> Stackup:
+def extract_stackup(board, progress: ProgressReporter = NULL,
+                    assumed: Optional[List[str]] = None) -> Stackup:
+    """The board's stackup; what had to be filled in is said in ``assumed``."""
     from kipy.proto.board import board_pb2
 
     try:
@@ -156,7 +162,7 @@ def extract_stackup(board, progress: ProgressReporter = NULL) -> Stackup:
     except Exception as e:  # noqa: BLE001 - stackup is optional; fall back below
         progress.warn(f"Could not read board stackup ({e}); using defaults")
         stackup_layers = []
-    cu_ids = _copper_layer_ids(board, stackup_layers, progress)
+    cu_ids = _copper_layer_ids(board, stackup_layers, progress, assumed)
     names = _layer_names(board, cu_ids, stackup_layers)
 
     entries = []  # (kind, layer_id, thickness_mm, material, epsilon_r), top to bottom
@@ -178,7 +184,7 @@ def extract_stackup(board, progress: ProgressReporter = NULL) -> Stackup:
         progress.warn(f"Could not read board stackup layers ({e}); using defaults")
         entries = []
 
-    return build_stackup(entries, cu_ids, names, progress)
+    return build_stackup(entries, cu_ids, names, progress, assumed)
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +222,8 @@ def _field_text(field) -> str:
             return ""
 
 
-def _pad_shapes(board, pads, layer_ids: Iterable[int], progress) -> Dict[str, Dict[int, List[Poly]]]:
+def _pad_shapes(board, pads, layer_ids: Iterable[int], progress,
+                assumed: Optional[List[str]] = None) -> Dict[str, Dict[int, List[Poly]]]:
     """Pad copper polygon per layer, keyed by pad id.
 
     Calls the GetPadShapeAsPolygon command directly: kipy's list helper drops pads
@@ -233,6 +240,9 @@ def _pad_shapes(board, pads, layer_ids: Iterable[int], progress) -> Dict[str, Di
         presence = {item.id.value: layers for item, layers in pres.items()}
     except Exception as e:  # noqa: BLE001 - older KiCad: assume present everywhere it has shape
         progress.warn(f"Padstack presence query failed ({e}); using raw pad shapes")
+        if assumed is not None:
+            assumed.append("Pad copper: this KiCad cannot say which layers plated pads have "
+                           "copper on, so each pad is kept on every layer it has a shape on")
 
     for lid in layer_ids:
         cmd = board_commands_pb2.GetPadShapeAsPolygon()
@@ -378,8 +388,9 @@ def extract_board(board, refill_zones: bool = False,
         with progress.timed("Refilling zones"):
             refill_and_wait(board, progress)
 
+    assumed: List[str] = []
     with progress.timed("Reading stackup"):
-        stackup = extract_stackup(board, progress)
+        stackup = extract_stackup(board, progress, assumed)
     cu_ids = [c.id for c in stackup.copper]
     progress.check_cancel()
 
@@ -439,7 +450,7 @@ def extract_board(board, refill_zones: bool = False,
             fp_shapes.extend(fp.definition.shapes)
         progress.info(f"{len(footprints)} footprints, {len(kpads)} pads")
         progress.info("Querying pad copper shapes per layer...")
-        shapes = _pad_shapes(board, kpads, cu_ids, progress)
+        shapes = _pad_shapes(board, kpads, cu_ids, progress, assumed)
         pads: List[Pad] = []
         for p in kpads:
             d = p.padstack.drill.diameter
@@ -486,7 +497,7 @@ def extract_board(board, refill_zones: bool = False,
     snap = BoardSnapshot(
         board_name=board.name, project_dir=project_dir, stackup=stackup, nets=nets,
         tracks=tracks, vias=vias, pads=pads, footprints=footprints, zones=zones,
-        outline=outline, source="kicad")
+        outline=outline, source="kicad", source_format="kicad-ipc", assumed=assumed)
     progress.info(f"Extraction complete in {time.perf_counter() - t0:.2f} s")
     return snap
 

@@ -942,8 +942,8 @@ class MainWindow(QMainWindow):
     def _load_setup(self, snap):
         from kipi.dc.pi.model import PISetup, setup_path
         project_dir = snap.project_dir
-        if not project_dir and snap.source and snap.source != "kicad":
-            project_dir = str(Path(snap.source).parent)
+        if not project_dir and snap.file:
+            project_dir = str(Path(snap.file).parent)
         path = setup_path(snap.board_name, project_dir)
         setup = PISetup()
         label = f"New setup (will be saved as {path.name})"
@@ -1244,9 +1244,17 @@ class MainWindow(QMainWindow):
         kinds = classify_nets(s)
         n_pwr = sum(1 for k in kinds.values() if k == "power")
         n_gnd = sum(1 for k in kinds.values() if k == "ground")
+        origin = " ".join(filter(None, [s.format_name, s.kicad_version]))
+        if s.file:
+            origin += f", saved as {s.file}"
+        # Values the source did not give, so the results rest on KiPI's placeholders.
+        assumed = ("<p><b>Placeholders</b> (not from the board):</p><ul>" +
+                   "".join(f"<li>{html.escape(a)}</li>" for a in s.assumed) + "</ul>"
+                   if s.assumed else "")
         self.info.setHtml(
             f"<b>{html.escape(s.board_name)}</b><br>"
-            f"<small>{html.escape(s.source)} {html.escape(s.kicad_version)}</small><br><br>"
+            f"<small>From {html.escape(origin)}</small><br><br>"
+            f"{assumed}"
             f"Board thickness: {st.board_thickness_mm:.3f} mm"
             f"{'' if st.from_board else ' <i>(default stackup)</i>'}<br>"
             f"Nets: {len(s.nets)} ({n_pwr} power, {n_gnd} ground)<br>"

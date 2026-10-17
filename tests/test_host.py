@@ -94,7 +94,7 @@ def test_the_registry_knows_snapshots(board_file):
     assert isinstance(src, SnapshotFileSource) and src.caps.reload
     assert not src.caps.refill_zones and not src.caps.select_items
     snap = src.load()
-    assert snap.board_name == make_board().board_name and snap.source == str(board_file)
+    assert snap.board_name == make_board().board_name and snap.file == str(board_file)
     with pytest.raises(ValueError, match="cannot open"):
         registry.open_board("board.brd")
     assert registry.file_filter().startswith("Boards (*.json.gz *.json);;KiPI snapshot (")
@@ -114,7 +114,7 @@ def test_standalone_opens_files_and_hides_kicad(app, no_3d, board_file):
 
     w.open_path(str(board_file))
     _idle(app, w)
-    assert w.snapshot is not None and w.snapshot.source == str(board_file)
+    assert w.snapshot is not None and w.snapshot.file == str(board_file)
     assert _toolbar(w)[:3] == ["Open…", "Reload", "Save snapshot…"]
     assert board_file.name in w.act_reload.toolTip()
     assert not w._act_refill.isVisible() and w.btn_select.isHidden()

@@ -151,9 +151,9 @@ def test_meshes_are_in_the_views_frame():
     assert "Normals" not in flat.point_data
 
 
-def _snap(name, project_dir="", source="kicad"):
+def _snap(name, project_dir="", file=""):
     return BoardSnapshot(name, project_dir, Stackup([], [], 1.6), [], [], [], [], [], [], [],
-                         source=source)
+                         file=file)
 
 
 def test_board_file_is_found_next_to_the_project_or_the_snapshot(tmp_path, board):
