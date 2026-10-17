@@ -213,6 +213,10 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   and every job a limit of its own, a new push cancels that branch's older run, and pushes
   that change only Markdown files skip CI. The tests themselves take about a minute; the
   rest of a job is installing packages.
+- CI has a **KiCad versions** job with a step for each KiCad release KiPI is tested against
+  (9.0.0 to 10.0.6, through the fake KiCad that answers as each one does) and for board
+  files saved by KiCad 9 and 10, so the pipeline shows which versions pass (#106).
+  `tests/core/test_ci.py` fails if the steps and the tested versions drift apart.
 
 ## 0.7.2
 
