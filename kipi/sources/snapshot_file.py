@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List
 
 from kipi.core.model.board import BoardSnapshot
 from kipi.core.model.snapshot_io import load
@@ -22,3 +23,6 @@ class SnapshotFileSource(BoardSource):
              refill_zones: bool = False) -> BoardSnapshot:
         progress.info(f"Reading {self.path}")
         return load(self.path)
+
+    def files(self) -> List[Path]:
+        return [self.path]

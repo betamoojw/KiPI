@@ -19,6 +19,7 @@ Ring = List[Point]
 #: What each ``BoardSnapshot.source_format`` is called in the UI.
 FORMAT_NAMES: Dict[str, str] = {
     "kicad-ipc": "KiCad PCB editor",
+    "kicad-pcb": "KiCad board file",
 }
 
 

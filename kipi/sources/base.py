@@ -17,7 +17,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional, Tuple
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from kipi.core.model.board import BoardSnapshot
 from kipi.core.progress import NULL, ProgressReporter
@@ -41,6 +42,11 @@ class BoardSource(ABC):
     def load(self, progress: ProgressReporter = NULL,
              refill_zones: bool = False) -> BoardSnapshot:
         """Read the board. Runs on a worker thread; may raise to report a failure."""
+
+    def files(self) -> List[Path]:
+        """The files the board is read from; when one changes on disk, the board has
+        changed (the window offers to reload it). Empty for a live source."""
+        return []
 
     def can_select(self) -> bool:
         """Whether :meth:`select` would work now (a source may need to connect first)."""

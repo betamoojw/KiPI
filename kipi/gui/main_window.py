@@ -11,13 +11,14 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from qtpy.QtCore import Qt, QTimer
+from qtpy.QtCore import QFileSystemWatcher, Qt, QTimer
 from qtpy.QtGui import QAction, QColor, QIcon, QPixmap, QTextCursor
 from qtpy.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
+    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMenu,
     QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QRadioButton, QSizePolicy, QSlider,
-    QSplitter, QStackedWidget, QTabWidget, QTextBrowser, QToolBar, QVBoxLayout, QWidget,
+    QSplitter, QStackedWidget, QTabWidget, QTextBrowser, QToolBar, QToolButton, QVBoxLayout,
+    QWidget,
 )
 
 from kipi import __version__
@@ -37,6 +38,9 @@ log = logging.getLogger("kipi")
 _KIND_TAG = {"power": "PWR", "ground": "GND", "signal": ""}
 _KIND_COLOR = {"power": "#e07050", "ground": "#70a0e0", "signal": "#a0a0a0"}
 MAX_AUTO_NETS = 4
+# A save can touch the board file several times (KiCad writes a new file and renames
+# it); the window waits this long for the file to settle before offering to reload.
+FILE_SETTLE_MS = 800
 # Analysis modes, chosen in the toolbar: (key, label, setup dock title).
 MODES = (("dc", "DC", "PI setup"), ("ac", "AC", "AC setup"))
 VIA_PICK_PX = 10      # a click this close to a via barrel on screen selects it
@@ -88,6 +92,15 @@ class MainWindow(QMainWindow):
         self._last_fraction_t = 0.0
         self._picked = None   # ("pad"|"via", id)
         self.mode = "dc"
+        # The board's files, watched so a board saved in its editor can be read again.
+        self._watcher = QFileSystemWatcher(self)
+        self._watcher.fileChanged.connect(self._board_file_changed)
+        self._changed_timer = QTimer(self)
+        self._changed_timer.setSingleShot(True)
+        self._changed_timer.setInterval(FILE_SETTLE_MS)
+        self._changed_timer.timeout.connect(self._offer_reload)
+        self._asking_reload = False
+        self._own_write_until = 0.0         # changes before this are KiPI's own saves
 
         # The central area: the 3D view and, in AC mode, the impedance plot as a second tab.
         from kipi.ac.gui.plot import ImpedancePlot
@@ -131,8 +144,15 @@ class MainWindow(QMainWindow):
         # plugin the board comes from KiCad, and snapshots open beside it; standalone,
         # Open reads a board file and Reload reads it again.
         if self.host is Host.STANDALONE:
-            act("Open…", self.open_board, "Open a board file: " +
-                ", ".join(f.name for f in registry.FORMATS))
+            self.act_open = act("Open…", self.open_board, "Open a board file: " +
+                                ", ".join(f.name for f in registry.FORMATS) +
+                                "; the arrow lists the boards opened lately")
+            self.recent_menu = QMenu(self)
+            self.recent_menu.aboutToShow.connect(self._fill_recent_menu)
+            self.act_open.setMenu(self.recent_menu)
+            button = tb.widgetForAction(self.act_open)
+            if isinstance(button, QToolButton):
+                button.setPopupMode(QToolButton.MenuButtonPopup)
         self.act_reload = act("Reload", self.reload_board, "Re-read the board")
         self.chk_refill = QCheckBox("Refill zones", self)
         # A toolbar widget is shown and hidden through the action holding it.
@@ -583,6 +603,59 @@ class MainWindow(QMainWindow):
         self.btn_select.setToolTip("Select the picked pad or via in "
                                    f"{src.description if src else 'the editor'}")
         self.btn_select.setVisible(src is not None and src.caps.select_items)
+        self._watch(src.files() if src is not None else [])
+
+    # --- the board's files -----------------------------------------------------------
+    def _watch(self, files):
+        old = self._watcher.files()
+        if old:
+            self._watcher.removePaths(old)
+        existing = [str(f) for f in files if Path(f).is_file()]
+        if existing:
+            self._watcher.addPaths(existing)
+
+    def _board_file_changed(self, path: str):
+        # Saving by writing a new file and renaming it drops the old one from the watch.
+        if path not in self._watcher.files() and Path(path).is_file():
+            self._watcher.addPath(path)
+        if time.monotonic() < self._own_write_until:
+            return
+        self._changed_timer.start()
+
+    def _offer_reload(self):
+        src = self._source
+        if src is None or self._closed or self._asking_reload:
+            return
+        files = src.files()
+        if self._busy() or not all(Path(f).is_file() for f in files):
+            self._changed_timer.start()      # mid-task or mid-save: ask a little later
+            return
+        self._watch(files)
+        self._asking_reload = True
+        try:
+            answer = QMessageBox.question(
+                self, "Board changed",
+                f"{src.name} has changed on disk. Read it again?\n\n"
+                "The setup and the nets you have ticked stay as they are.")
+        finally:
+            self._asking_reload = False
+        if answer == QMessageBox.Yes:
+            self.reload_board()
+
+    def _fill_recent_menu(self):
+        from kipi.gui import recent
+        self.recent_menu.clear()
+        paths = recent.boards()
+        for p in paths:
+            a = self.recent_menu.addAction(Path(p).name)
+            a.setToolTip(p)
+            a.setStatusTip(p)
+            a.triggered.connect(lambda _=False, p=p: self.open_path(p))
+        if not paths:
+            self.recent_menu.addAction("No recent boards").setEnabled(False)
+            return
+        self.recent_menu.addSeparator()
+        self.recent_menu.addAction("Clear the list", recent.clear)
 
     def open_board(self):
         """Standalone: open a board file, which Reload then reads again."""
@@ -599,9 +672,11 @@ class MainWindow(QMainWindow):
             return
 
         def done(snap):
+            from kipi.gui import recent
             self._source = source
             self._source_changed()
             self._set_snapshot(snap)
+            recent.add(path)
 
         self._run(lambda progress: source.load(progress), done, "Opening board")
 
@@ -633,6 +708,7 @@ class MainWindow(QMainWindow):
         if not path:
             return
         from kipi.core.model.snapshot_io import save
+        self._own_write_until = time.monotonic() + 2.0   # may be the file Reload reads
         save(self.snapshot, path)
         self.log(f"Snapshot saved to {path}")
 
@@ -1421,6 +1497,7 @@ class MainWindow(QMainWindow):
     # ============================================================ close
     def closeEvent(self, event):
         self._model_timer.stop()            # start no kicad-cli for a closed window
+        self._changed_timer.stop()
         self._models_pending = False
         self._closed = True
         for task in (self._task, self._model_task):

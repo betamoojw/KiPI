@@ -1,7 +1,7 @@
 """The board files KiPI can open, and which source reads each.
 
-The Open dialog's filters come from :data:`FORMATS`; a new reader (``.kicad_pcb``, HYP,
-ODB++) is one more entry here.
+The Open dialog's filters come from :data:`FORMATS`; a new reader (HYP, ODB++) is one
+more entry here.
 """
 
 from __future__ import annotations
@@ -25,12 +25,18 @@ class FileFormat:
         return any(fnmatch.fnmatch(name, p) for p in self.patterns)
 
 
+def _kicad_board(path: Path) -> BoardSource:
+    from kipi.sources.kicad_pcb.source import KiCadFileSource
+    return KiCadFileSource(path)
+
+
 def _snapshot(path: Path) -> BoardSource:
     from kipi.sources.snapshot_file import SnapshotFileSource
     return SnapshotFileSource(path)
 
 
 FORMATS: List[FileFormat] = [
+    FileFormat("KiCad board", ("*.kicad_pcb",), _kicad_board),
     FileFormat("KiPI snapshot", ("*.json.gz", "*.json"), _snapshot),
 ]
 

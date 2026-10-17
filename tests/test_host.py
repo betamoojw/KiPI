@@ -2,7 +2,9 @@
 looks like."""
 
 import os
+import shutil
 import time
+from pathlib import Path
 
 import pytest
 
@@ -89,7 +91,6 @@ def test_the_registry_knows_snapshots(board_file):
     from kipi.sources import registry
     from kipi.sources.snapshot_file import SnapshotFileSource
     assert registry.format_for("B.KIPI.JSON.GZ").name == "KiPI snapshot"
-    assert registry.format_for("board.kicad_pcb") is None
     src = registry.open_board(board_file)
     assert isinstance(src, SnapshotFileSource) and src.caps.reload
     assert not src.caps.refill_zones and not src.caps.select_items
@@ -97,7 +98,22 @@ def test_the_registry_knows_snapshots(board_file):
     assert snap.board_name == make_board().board_name and snap.file == str(board_file)
     with pytest.raises(ValueError, match="cannot open"):
         registry.open_board("board.brd")
-    assert registry.file_filter().startswith("Boards (*.json.gz *.json);;KiPI snapshot (")
+    assert registry.file_filter().startswith(
+        "Boards (*.kicad_pcb *.json.gz *.json);;KiCad board (*.kicad_pcb);;KiPI snapshot (")
+    assert src.files() == [board_file]
+
+
+def test_the_registry_knows_kicad_boards():
+    from kipi.sources import registry
+    from kipi.sources.kicad_pcb.source import KiCadFileSource
+    board = Path(__file__).parent / "data" / "kicad_pcb" / "features.kicad_pcb"
+    assert registry.format_for("Board.KiCad_PCB").name == "KiCad board"
+    src = registry.open_board(board)
+    assert isinstance(src, KiCadFileSource) and src.caps.reload
+    assert not src.caps.refill_zones and not src.caps.select_items
+    assert src.files() == [board]
+    snap = src.load()
+    assert snap.board_name == "features.kicad_pcb" and snap.format_name == "KiCad board file"
 
 
 # --- The window --------------------------------------------------------------------------
@@ -119,6 +135,79 @@ def test_standalone_opens_files_and_hides_kicad(app, no_3d, board_file):
     assert board_file.name in w.act_reload.toolTip()
     assert not w._act_refill.isVisible() and w.btn_select.isHidden()
     assert w.windowTitle().endswith(f"{w.snapshot.board_name} (standalone)")
+    w.close()
+
+
+@pytest.fixture
+def kicad_board(tmp_path, monkeypatch):
+    """A KiCad board file to open, with the recent-boards list kept in ``tmp_path``."""
+    from qtpy.QtCore import QSettings
+    from kipi.gui import recent
+    data = Path(__file__).parent / "data" / "kicad_pcb"
+    for name in ("features.kicad_pcb", "features.kicad_pro"):
+        shutil.copy(data / name, tmp_path / name)
+    ini = str(tmp_path / "settings.ini")
+    monkeypatch.setattr(recent, "settings", lambda: QSettings(ini, QSettings.IniFormat))
+    return tmp_path / "features.kicad_pcb"
+
+
+def test_standalone_opens_kicad_boards(app, no_3d, kicad_board):
+    from kipi.gui import recent
+    from kipi.gui.main_window import MainWindow
+    w = MainWindow()
+    w._fill_recent_menu()
+    assert [a.text() for a in w.recent_menu.actions()] == ["No recent boards"]
+
+    w.open_path(str(kicad_board))
+    _idle(app, w)
+    assert w.snapshot.source_format == "kicad-pcb"
+    assert w.snapshot.board_name == "features.kicad_pcb"
+    assert _toolbar(w)[:3] == ["Open…", "Reload", "Save snapshot…"]
+    assert [Path(f) for f in w._watcher.files()] == [kicad_board]
+    assert recent.boards() == [str(kicad_board.resolve())]
+    w._fill_recent_menu()
+    assert w.recent_menu.actions()[0].text() == "features.kicad_pcb"
+    w.close()
+
+
+def test_a_board_saved_on_disk_is_offered_again(app, no_3d, kicad_board, monkeypatch):
+    from kipi.gui.main_window import MainWindow
+    w = MainWindow()
+    w.open_path(str(kicad_board))
+    _idle(app, w)
+    first = w.snapshot
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: asked.append(a[2]) or QMessageBox.Yes)
+
+    w._own_write_until = time.monotonic() + 60       # KiPI's own save: not offered
+    w._board_file_changed(str(kicad_board))
+    assert not w._changed_timer.isActive()
+
+    w._own_write_until = 0.0
+    with kicad_board.open("a", encoding="utf-8") as f:     # saved again in KiCad
+        f.write("\n")
+    w._board_file_changed(str(kicad_board))
+    assert w._changed_timer.isActive()
+    w._changed_timer.stop()
+    w._offer_reload()
+    _idle(app, w)
+    assert asked and "features.kicad_pcb has changed on disk" in asked[0]
+    assert w.snapshot is not first and w.snapshot.board_name == first.board_name
+    w.close()
+
+
+def test_a_bad_board_file_is_reported(app, no_3d, tmp_path, monkeypatch):
+    from kipi.gui.main_window import MainWindow
+    said = []
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a: said.append(a[2]))
+    bad = tmp_path / "old.kicad_pcb"
+    bad.write_text("(kicad_pcb (version 20211014))", encoding="utf-8")
+    w = MainWindow()
+    w.open_path(str(bad))
+    _idle(app, w)
+    assert said and "KiCad 7 or later" in said[0]
+    assert w.snapshot is None and w._source is None
     w.close()
 
 
