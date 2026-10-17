@@ -23,10 +23,12 @@ from qtpy.QtWidgets import (
 )
 
 from kipi.ac.checks import capacitor_candidates, default_ground, validate_ac
-from kipi.ac.model import CapModel, Probe
+from kipi.ac.model import AGING_PCT_PER_DECADE, CapModel, Probe
 from kipi.core.model.board import BoardSnapshot
 from kipi.core.model.nets import classify_nets, sorted_nets
-from kipi.core.model.parts import is_class2, parse_capacitance, parse_voltage_rating
+from kipi.core.model.parts import (
+    is_class2, parse_capacitance, parse_dielectric, parse_voltage_rating,
+)
 from kipi.dc.gui.pi_panel import (
     ItemList, LinkEditor, PIPanel, VrmEditor, _Editor, _spin, _unique, make_searchable,
     new_link, new_vrm, parts_on_net, tip,
@@ -74,6 +76,13 @@ class CapEditor(_Editor):
         f.addRow(self.chk_bias)
         f.addRow("Voltage rating", self.rated)
         f.addRow("Kept at rating", self.kept)
+        self.dielectric = QComboBox()
+        self.dielectric.addItem("not set (not aged)", "")
+        for d in AGING_PCT_PER_DECADE:
+            self.dielectric.addItem(d, d)
+        self.aging = _spin(0, 50, 0, 2, " %/decade", 0.5)
+        f.addRow("Dielectric", self.dielectric)
+        f.addRow("Aging", self.aging)
         for w, text in (
                 (self.name, "A name for this model, e.g. the part number or value"),
                 (self.cap, "Capacitance of one part, at no DC bias. Tick Estimate DC bias "
@@ -90,6 +99,13 @@ class CapEditor(_Editor):
                             "voltage, from the datasheet's DC bias curve (typically 30 to "
                             "50 %; smaller cases lose more). The curve is shaped like a "
                             "typical X5R/X7R part's."),
+                (self.dielectric, "The ceramic dielectric, for aging: with Capacitor aging "
+                                  "ticked in the Sweep tab, a model with a dielectric loses "
+                                  "its aging rate for every decade of hours operated past "
+                                  "1000. Leave it unset for polymer and electrolytic parts."),
+                (self.aging, "Capacitance lost per decade of hours (e.g. from 1000 to 10000 "
+                             "hours). Picking a dielectric fills in its typical rate; the "
+                             "datasheet's is better."),
                 (self.esl, "Equivalent series inductance of the part itself (from its "
                            "datasheet); the board's mounting inductance is simulated"),
                 (self.esr, "Equivalent series resistance of one part, from its datasheet")):
@@ -97,6 +113,8 @@ class CapEditor(_Editor):
         self._watch(self.name, self.cap, self.esl, self.esr, self.rated, self.kept)
         self.chk_bias.toggled.connect(self._store)
         self.chk_bias.toggled.connect(self.kept.setEnabled)
+        self.dielectric.currentIndexChanged.connect(self._dielectric_changed)
+        self._watch(self.aging)
 
         self.filter = QLineEdit()
         self.filter.setPlaceholderText("Filter parts (reference, value, footprint or net)…")
@@ -145,6 +163,15 @@ class CapEditor(_Editor):
         f.addRow(self.lbl_count)
         self._filling = False
 
+    def _dielectric_changed(self, _i):
+        d = self.dielectric.currentData() or ""
+        self.aging.setEnabled(bool(d))
+        if not self._loading:
+            self.aging.blockSignals(True)
+            self.aging.setValue(AGING_PCT_PER_DECADE.get(d, 0.0))
+            self.aging.blockSignals(False)
+        self._store()
+
     # ------------------------------------------------------------ values
     def _load(self, m: CapModel):
         self.name.setText(m.name)
@@ -155,6 +182,13 @@ class CapEditor(_Editor):
         self.rated.setValue(m.rated_v or 0.0)
         self.kept.setValue(m.kept_at_rated_pct)
         self.kept.setEnabled(m.dc_bias)
+        i = self.dielectric.findData(m.dielectric)
+        if i < 0:                                  # one KiPI does not list: keep it
+            self.dielectric.addItem(m.dielectric, m.dielectric)
+            i = self.dielectric.count() - 1
+        self.dielectric.setCurrentIndex(i)
+        self.aging.setValue(m.aging_pct_per_decade)
+        self.aging.setEnabled(bool(m.dielectric))
         self.fill_table()
 
     def _save(self, m: CapModel):
@@ -165,6 +199,8 @@ class CapEditor(_Editor):
         m.dc_bias = self.chk_bias.isChecked()
         m.rated_v = self.rated.value() or None
         m.kept_at_rated_pct = self.kept.value()
+        m.dielectric = self.dielectric.currentData() or ""
+        m.aging_pct_per_decade = self.aging.value()
 
     # ------------------------------------------------------------ parts
     def fill_table(self):
@@ -531,7 +567,7 @@ class ACPanel(QWidget):
                 "RLC models for the decoupling capacitors, and which parts use each",
                 "Where the impedance is looked into (usually a device's power pins), "
                 "with its target",
-                "Frequency range and resolution of the sweep, and capacitor DC bias",
+                "Frequency range and resolution of the sweep, and capacitor DC bias and aging",
                 "Mesh density and dielectric losses for the AC field solve")):
             self.tabs.setTabToolTip(i, text)
         for il in self._lists():
@@ -653,6 +689,20 @@ class ACPanel(QWidget):
                               "or else the rail's VRM set point). Untick to solve with every "
                               "model's capacitance as entered.")
         self.chk_bias.toggled.connect(self._ac_settings_changed)
+        self.chk_aging = QCheckBox("Capacitor aging")
+        self.chk_aging.setChecked(s.aging)
+        self.spin_hours = _spin(1, 1e7, s.aging_hours, 0, " h", 1000)
+        self.spin_hours.setEnabled(s.aging)
+        f.addRow(self.chk_aging)
+        f.addRow("Hours operated", self.spin_hours)
+        tip(f, self.chk_aging, "Age the capacitor models that have a dielectric: each loses "
+                               "its aging rate per decade of hours operated past 1000 hours")
+        tip(f, self.spin_hours, "How long the capacitors have operated (8760 hours a year; "
+                                "87600 is ten years). Heating a ceramic past its Curie point, "
+                                "as in reflow, restarts its aging.")
+        self.chk_aging.toggled.connect(self.spin_hours.setEnabled)
+        self.chk_aging.toggled.connect(self._ac_settings_changed)
+        self.spin_hours.valueChanged.connect(self._ac_settings_changed)
         return w
 
     def _mesh_tab(self) -> QWidget:
@@ -700,6 +750,8 @@ class ACPanel(QWidget):
         s.loss_tangent = self.spin_tand.value()
         s.default_er = self.spin_er.value()
         s.dc_bias = self.chk_bias.isChecked()
+        s.aging = self.chk_aging.isChecked()
+        s.aging_hours = self.spin_hours.value()
         self._on_changed()
 
     def _load_ac_settings(self):
@@ -709,14 +761,16 @@ class ACPanel(QWidget):
                        (self.spin_fpd, s.field_points_per_decade),
                        (self.spin_edge, s.max_edge_mm), (self.spin_grading, s.grading),
                        (self.spin_min_edge, s.min_edge_mm), (self.spin_tand, s.loss_tangent),
-                       (self.spin_er, s.default_er)):
+                       (self.spin_er, s.default_er), (self.spin_hours, s.aging_hours)):
             wdg.blockSignals(True)
             wdg.setValue(v)
             wdg.blockSignals(False)
-        for chk, on in ((self.chk_report, s.html_report), (self.chk_bias, s.dc_bias)):
+        for chk, on in ((self.chk_report, s.html_report), (self.chk_bias, s.dc_bias),
+                        (self.chk_aging, s.aging)):
             chk.blockSignals(True)
             chk.setChecked(on)
             chk.blockSignals(False)
+        self.spin_hours.setEnabled(s.aging)
 
     # ------------------------------------------------------------------ data
     def nets(self) -> List[str]:
@@ -889,9 +943,12 @@ class ACPanel(QWidget):
             taken.append(name)
             farads = parse_capacitance(value) or 0.0
             rated = parse_voltage_rating(value)
+            diel = parse_dielectric(value)
             self.setup.caps.append(CapModel(name, farads, 0.0, 0.0, refs,
                                             dc_bias=rated is not None and is_class2(value),
-                                            rated_v=rated))
+                                            rated_v=rated, dielectric=diel,
+                                            aging_pct_per_decade=AGING_PCT_PER_DECADE.get(
+                                                diel, 0.0)))
         self.cap_list.reload()
         self._on_changed()
 
@@ -907,6 +964,7 @@ class ACPanel(QWidget):
         vals = (f"{_fmt_farads(m.capacitance_f)}, {m.esl_h * 1e9:g} nH, {m.esr_ohm * 1e3:g} mΩ"
                 if m.capacitance_f and m.esl_h and m.esr_ohm else "values needed")
         bias = f", DC bias {m.rated_v:g} V rated" if m.dc_bias and m.rated_v else ""
+        bias += f", {m.dielectric}" if m.dielectric else ""
         return (f"{m.name}: {vals}{bias} "
                 f"({len(m.refs)} part{'s' if len(m.refs) != 1 else ''})")
 

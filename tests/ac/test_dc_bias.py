@@ -79,7 +79,7 @@ def test_without_a_dc_solve_the_vrm_set_point_is_used(board):
     setup = _setup(board)
     r = solve_ac(board, setup, "VRM1", "GND")
     assert r.cap_bias["C1"] == (3.3, pytest.approx(setup.caps[0].capacitance_at(3.3)))
-    assert "set point" in r.bias_note and "VRM1" in r.bias_note
+    assert "set point" in r.bias_note and "VRM1" in r.bias_note and "aged" not in r.bias_note
     assert setup.caps[0].capacitance_f == 10e-6           # the setup's model is untouched
     setup.ac.dc_bias = False
     off = solve_ac(board, setup, "VRM1", "GND")
@@ -105,7 +105,7 @@ def test_the_report_shows_the_derated_capacitance(board, tmp_path):
     setup = _setup(board)
     r = solve_ac(board, setup, "VRM1", "GND")
     html = write_ac_report(tmp_path / "r.html", r, board, setup).read_text(encoding="utf-8")
-    assert "C at DC bias" in html and "at 3.3 V" in html
+    assert "C derated" in html and "at 3.3 V" in html
 
 
 # ---------------------------------------------------------------------------

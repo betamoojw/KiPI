@@ -1120,6 +1120,13 @@ are required.</p>
     unticked for C0G, polymer and electrolytic parts.</td></tr>
   <tr><td>Voltage rating</td><td class="wrap">The part's rated DC voltage, which the estimate
     is scaled by. Needed when Estimate DC bias is ticked.</td></tr>
+  <tr><td>Dielectric</td><td class="wrap">The ceramic dielectric (C0G, X7R, X5R, Y5V…), for
+    aging. Picking one fills in its typical aging rate. Leave it unset for polymer and
+    electrolytic parts, which are then not aged. <b>Models from values</b> reads it from the
+    value (<code>NP0</code> counts as C0G).</td></tr>
+  <tr><td>Aging</td><td class="wrap">Capacitance lost per decade of hours operated, in % (X7R
+    about 2, X5R about 3, Y5V about 7; C0G does not age). Enter the datasheet's rate if it
+    gives one. Used when <b>Capacitor aging</b> is ticked in the Sweep tab.</td></tr>
   <tr><td>Kept at rating</td><td class="wrap">How much of its capacitance the part keeps at its
     rated voltage, from the datasheet's DC bias curve (40 % by default; often 30 to 50 %, and
     less for smaller cases). Between 0 V and beyond the rating, the capacitance follows
@@ -1230,6 +1237,13 @@ Distribution System Design Methodology and Capacitor Selection for Modern CMOS T
   <tr><td>Capacitor DC bias</td><td class="wrap">Ticked (the default), the capacitor models
     with <b>Estimate DC bias</b> are derated by the DC voltage across each part. Untick it to
     solve with every model's capacitance as entered.</td></tr>
+  <tr><td>Capacitor aging</td><td class="wrap">Ticked, every capacitor model with a dielectric
+    loses its aging rate for each decade of <b>Hours operated</b> past 1000 hours (the
+    usual reference age of the rated capacitance): an X7R part at 2 %/decade keeps 96 % after
+    100,000 hours. This multiplies with the DC bias estimate. Off by default.</td></tr>
+  <tr><td>Hours operated</td><td class="wrap">How long the capacitors have aged, in hours
+    (8760 a year; 87,600, ten years, by default). Heating a ceramic past its Curie point,
+    as in reflow soldering, restarts its aging.</td></tr>
 </table>
 </div>
 </details>

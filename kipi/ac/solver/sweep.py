@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from kipi.ac.bias import apply_dc_bias, dc_volts
+from kipi.ac.bias import apply_derating, dc_volts
 from kipi.ac.board_map import ACMap, MapMesh, build_map
 from kipi.ac.checks import rail_caps, rail_nets, validate_ac
 from kipi.ac.solver.fem import ACError, ACStats, ACSystem, PortDef
@@ -98,9 +98,9 @@ class ACResult:
     bandwidth_hz: Optional[float] = None  # the VRM's control loop bandwidth, if given
     report_path: Optional[Path] = None    # the HTML report, when one was written
     board_map: Optional[ACMap] = None     # what the Board map tab shows (#67)
-    # DC bias (#74): {reference: (DC volts, derated farads)} for the parts derated, and
-    # where the voltages came from.
-    cap_bias: Dict[str, Tuple[float, float]] = field(default_factory=dict)
+    # DC bias (#74) and aging (#109): {reference: (DC volts or None, derated farads)} for
+    # the parts derated, and what was done.
+    cap_bias: Dict[str, Tuple[Optional[float], float]] = field(default_factory=dict)
     bias_note: str = ""
 
 
@@ -210,7 +210,7 @@ def solve_ac(snap: BoardSnapshot, setup: PISetup, vrm_name: str, gnd: str,
         volts = dc_volts(snap, dc_result, [(p.name, p.element, None, p.plus_pads, p.minus_pads)
                                            for p in ports if p.kind == "cap"
                                            and p.element.dc_bias])
-    cap_bias, bias_notes = apply_dc_bias(ports, setup, vrm, volts)
+    cap_bias, bias_notes = apply_derating(ports, setup, vrm, volts)
     for n in bias_notes:
         progress.info(n)
     progress.info(f"Rail {vrm_name}: {', '.join(sorted(rail))} against {gnd}; "

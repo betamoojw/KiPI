@@ -505,6 +505,9 @@ series links with DC mode (fields only DC mode uses are grayed out) and adds:
   solve found across each part, or else the rail's VRM set point. **Models from values**
   reads the rating from values such as `10uF 6.3V X5R` and ticks the box for class II
   dielectrics.
+  A model's **Dielectric** (X7R, X5R, Y5V…) fills in its typical **Aging** rate, in % of
+  capacitance lost per decade of hours; enter the datasheet's rate if it gives one.
+  **Models from values** reads the dielectric from the value too.
 * **Probes tab**: Defines where to plot the PDN impedance, usually a device's supply and ground
   pins. Each probe has a target impedance and frequency range: **flat** (an impedance up to a frequency) or **custom**, a
   piecewise-linear mask through frequency/impedance points on the log-log plot.
@@ -518,7 +521,9 @@ series links with DC mode (fields only DC mode uses are grayed out) and adds:
   Technology"](https://doi.org/10.1109/6040.784476), IEEE Trans. Adv. Packaging, 1999.
 * **Sweep tab**: start and stop frequency, points per decade, and how many copper field
   solves per decade (the copper's response is interpolated between them). **Capacitor DC
-  bias** turns the DC bias estimate on or off for every model at once.
+  bias** turns the DC bias estimate on or off for every model at once. **Capacitor aging**
+  ages every model with a dielectric by the **Hours operated** (ten years by default), on top
+  of its DC bias: each loses its aging rate per decade of hours past 1000 hours.
 * **Mesh tab**: mesh size, minimum edge at plated holes (which sets the via inductance),
   dielectric loss tangent and default εr.
 

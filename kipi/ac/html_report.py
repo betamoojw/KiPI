@@ -383,12 +383,13 @@ def write_ac_report(path, result, snap: BoardSnapshot, setup, progress=None) -> 
         rows.append(row)
     head = ["Model", "C", "ESL", "ESR", "Self-resonance", "Parts on rail", "References"]
     if bias:
-        head.insert(2, "C at DC bias")
+        head.insert(2, "C derated")
     parts.append(_table(head, rows, "caps"))
     if bias:
-        parts.append(f"<p class='note'>{_e(result.bias_note)}. The capacitance kept follows a "
-                     "typical class II ceramic's curve through each model's capacitance kept "
-                     "at its voltage rating.</p>")
+        parts.append(f"<p class='note'>{_e(result.bias_note)}. DC bias follows a typical "
+                     "class II ceramic's curve through each model's capacitance kept at its "
+                     "voltage rating; aging takes each model's rate per decade of hours past "
+                     "1000 hours.</p>")
     total_c = sum(m.capacitance_f * n for m, n in models)
     total_c -= sum(model_of[r].capacitance_f - c for r, (_v, c) in bias.items()
                    if r in model_of)
@@ -449,17 +450,17 @@ def write_ac_report(path, result, snap: BoardSnapshot, setup, progress=None) -> 
 
 
 def _bias_text(m, at: list) -> str:
-    """A model's capacitance at the DC bias its parts see: "4.1 µF at 3.3 V (41 %)", or the
-    range over its parts; empty when it was not derated."""
+    """A model's derated capacitance: "4.1 µF at 3.3 V (41 %)" at the DC bias its parts see,
+    "9.6 µF (96 %)" when only aged, or the range over its parts; empty when not derated."""
     if not at:
         return ""
-    vs, cs = [v for v, _c in at], [c for _v, c in at]
+    vs, cs = [v for v, _c in at if v is not None], [c for _v, c in at]
 
     def span(lo, hi, fmt):
         return fmt(lo) if abs(hi - lo) <= 1e-3 * max(abs(hi), 1e-30) else f"{fmt(lo)} to {fmt(hi)}"
     kept = span(min(cs) / m.capacitance_f, max(cs) / m.capacitance_f, lambda x: f"{x:.0%}")
-    return (f"{span(min(cs), max(cs), lambda c: _si(c, 'F'))} at "
-            f"{span(min(vs), max(vs), lambda v: f'{v:.3g} V')} ({kept})")
+    at_v = f" at {span(min(vs), max(vs), lambda v: f'{v:.3g} V')}" if vs else ""
+    return f"{span(min(cs), max(cs), lambda c: _si(c, 'F'))}{at_v} ({kept})"
 
 
 def _natural(ref: str):

@@ -7,6 +7,7 @@ imports the DC model, so the setup can import this module.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
@@ -15,6 +16,15 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 # a typical curve's shape; the datasheet's curve is better where there is one.
 BIAS_EXP = 1.5
 DEFAULT_KEPT_AT_RATED_PCT = 40.0
+
+# Aging (#109): a class II ceramic loses a fixed share of its capacitance per decade of
+# hours since it was last heated past its Curie point. Its rated capacitance is taken as
+# at AGING_REF_HOURS (the usual referee time); parts are not aged before that.
+AGING_REF_HOURS = 1000.0
+DEFAULT_AGING_HOURS = 87600.0           # ten years
+# Typical aging rates, % per decade of hours; the datasheet's figure is better.
+AGING_PCT_PER_DECADE = {"C0G": 0.0, "X8R": 2.0, "X7R": 2.0, "X7S": 2.5, "X7T": 2.5,
+                        "X6S": 3.0, "X5R": 3.0, "Z5U": 5.0, "Y5V": 7.0}
 
 if TYPE_CHECKING:                       # PinRef lives in the setup model, which imports us
     from kipi.dc.pi.model import PinRef
@@ -32,15 +42,27 @@ class CapModel:
     dc_bias: bool = False
     rated_v: Optional[float] = None     # DC voltage rating
     kept_at_rated_pct: float = DEFAULT_KEPT_AT_RATED_PCT   # capacitance left at rated_v
+    # Aging (#109): the dielectric ("" when not set: not aged) and its aging rate.
+    dielectric: str = ""
+    aging_pct_per_decade: float = 0.0
 
-    def capacitance_at(self, volts: float) -> float:
-        """One part's capacitance with ``volts`` DC across it: derated when the model
-        estimates DC bias and has a rating, else its capacitance as entered."""
+    def capacitance_at(self, volts: float, hours: Optional[float] = None) -> float:
+        """One part's capacitance with ``volts`` DC across it after ``hours`` of operation
+        (None: not aged): derated when the model estimates DC bias and has a rating, and
+        aged when it has a dielectric; else its capacitance as entered."""
+        c = self.capacitance_f * self.aged(hours)
         if not (self.dc_bias and self.rated_v and self.rated_v > 0 and volts):
-            return self.capacitance_f
+            return c
         kept = min(max(self.kept_at_rated_pct, 1.0), 100.0) / 100.0
         k = 1.0 / kept - 1.0
-        return self.capacitance_f / (1.0 + k * (abs(volts) / self.rated_v) ** BIAS_EXP)
+        return c / (1.0 + k * (abs(volts) / self.rated_v) ** BIAS_EXP)
+
+    def aged(self, hours: Optional[float]) -> float:
+        """The share of its capacitance the part keeps after ``hours`` of aging."""
+        if not (self.dielectric and hours and hours > AGING_REF_HOURS):
+            return 1.0
+        loss = self.aging_pct_per_decade / 100.0 * math.log10(hours / AGING_REF_HOURS)
+        return max(1.0 - loss, 0.0)
 
     def impedance(self, omega):
         """Complex impedance at angular frequency ``omega`` (scalar or array)."""
@@ -95,6 +117,9 @@ class ACSettings:
     html_report: bool = False             # write an HTML report after each rail's solve
     # Derate the capacitor models that estimate DC bias (#74); off: every model as entered.
     dc_bias: bool = True
+    # Age the capacitor models that have a dielectric (#109) by this many hours.
+    aging: bool = False
+    aging_hours: float = DEFAULT_AGING_HOURS
 
     def frequencies(self):
         import numpy as np

@@ -123,6 +123,12 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   **Models from values** reads the rating from values like `10uF 6.3V X5R` and ticks the
   estimate for class II dielectrics. The Results notes say where the voltages came from, and
   the HTML report lists each model's capacitance at its bias.
+- Capacitor **aging** (#109). A capacitor model has a **Dielectric**, which fills in its
+  typical **Aging** rate (% per decade of hours; editable). With **Capacitor aging** ticked
+  in the Sweep tab, each model with a dielectric loses its rate for each decade of **Hours
+  operated** past 1000 hours (ten years by default), on top of its DC bias. **Models from
+  values** reads the dielectric from the value, and the Results notes and HTML report show
+  the derated capacitance.
 
 ### Changed
 - `python -m kipi` with no arguments starts standalone instead of connecting to the running

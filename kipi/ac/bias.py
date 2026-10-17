@@ -4,6 +4,8 @@ A class II ceramic loses capacitance with the DC voltage across it. Models that 
 DC bias are derated part by part, at the voltage the last DC solve found across each
 part's pads; without one (or for a part off the DC solve's copper), at the rail's VRM set
 point.
+
+Models with a dielectric are also aged (#109), when the sweep settings say for how long.
 """
 
 from __future__ import annotations
@@ -87,40 +89,57 @@ def dc_volts(snap: BoardSnapshot, dc_result, caps: List[tuple]) -> Dict[str, flo
     return out
 
 
-def apply_dc_bias(ports, setup, vrm, volts: Dict[str, float]
-                  ) -> Tuple[Dict[str, Tuple[float, float]], List[str]]:
-    """Derate the capacitor ports whose model estimates DC bias, in place: each gets its
-    own copy of the model at the voltage across it (``volts``, else the VRM's set point).
+def apply_derating(ports, setup, vrm, volts: Dict[str, float]
+                   ) -> Tuple[Dict[str, Tuple[Optional[float], float]], List[str]]:
+    """Derate the capacitor ports, in place, for DC bias (models that estimate it, at the
+    voltage across each part: ``volts``, else the VRM's set point) and aging (#109, models
+    with a dielectric, when the sweep settings age them). Each derated part gets its own
+    copy of its model.
 
-    Returns {reference: (volts, farads)} for the parts derated, and notes for the log.
+    Returns {reference: (DC volts or None, farads)} for the parts derated, and notes for
+    the log.
     """
-    if not setup.ac.dc_bias:
-        return {}, []
-    bias: Dict[str, Tuple[float, float]] = {}
-    from_dc = 0
+    s = setup.ac
+    hours = s.aging_hours if s.aging else None
+    out: Dict[str, Tuple[Optional[float], float]] = {}
+    n_bias = from_dc = n_aged = 0
     kept: List[float] = []
     for port in ports:
         m = port.element
-        if port.kind != "cap" or not (m.dc_bias and m.rated_v):
+        if port.kind != "cap":
             continue
-        v = volts.get(port.name)
-        from_dc += v is not None
-        v = abs(vrm.voltage) if v is None else v
-        c = m.capacitance_at(v)
+        biased = s.dc_bias and m.dc_bias and bool(m.rated_v)
+        aged = m.aged(hours) < 1.0
+        if not (biased or aged):
+            continue
+        v = None
+        if biased:
+            n_bias += 1
+            v = volts.get(port.name)
+            from_dc += v is not None
+            v = abs(vrm.voltage) if v is None else v
+        n_aged += aged
+        c = m.capacitance_at(v or 0.0, hours)
         port.element = replace(m, capacitance_f=c)
-        bias[port.name] = (v, c)
+        out[port.name] = (v, c)
         kept.append(c / m.capacitance_f if m.capacitance_f else 1.0)
     notes = []
-    if bias:
-        if from_dc == len(bias):
-            where = "the voltages the last DC solve found across them"
-        elif from_dc:
-            where = (f"the last DC solve's voltages ({from_dc} of them) or else the "
-                     f"{vrm.name} set point, {vrm.voltage:g} V")
-        else:
-            where = f"the {vrm.name} set point, {vrm.voltage:g} V (no DC solve of this rail)"
+    if out:
+        what = []
+        if n_bias:
+            if from_dc == n_bias:
+                where = "the voltages the last DC solve found across them"
+            elif from_dc:
+                where = (f"the last DC solve's voltages ({from_dc} of them) or else the "
+                         f"{vrm.name} set point, {vrm.voltage:g} V")
+            else:
+                where = (f"the {vrm.name} set point, {vrm.voltage:g} V (no DC solve of this "
+                         "rail)")
+            what.append(f"{n_bias} for DC bias at {where}")
+        if n_aged:
+            what.append(f"{n_aged} aged {hours:g} hours")
         lo, hi = min(kept), max(kept)
         span = f"{lo:.0%}" if hi - lo < 0.005 else f"{lo:.0%} to {hi:.0%}"
-        notes.append(f"DC bias: {len(bias)} capacitor(s) derated at {where}, keeping {span} "
-                     "of their capacitance")
-    return bias, notes
+        notes.append(f"Capacitors derated: {'; '.join(what)}. They keep {span} of their "
+                     "capacitance")
+    return out, notes
