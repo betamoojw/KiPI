@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from kipi.sources.kicad_pcb.pads import DEFAULT_MAX_ERROR_MM
+from kipi.core.geometry.pad_shapes import DEFAULT_MAX_ERROR_MM
 
 DEFAULT_CLASS = "Default"
 

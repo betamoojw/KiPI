@@ -8,6 +8,8 @@
    drawings with and without a net, an outline with an arc and a cutout).
 2. Has kicad-cli fill its zones and save it, so the file is exactly what KiCad writes.
 3. Writes ``features_v9.kicad_pcb``: the same board with KiCad 9's numbered nets.
+4. Exports the board as ODB++ to ``tests/data/odbpp``: ``features.zip`` at 6 decimals and
+   ``features_p2.tgz`` at KiCad's default 2.
 
 Then open each board in the PCB editor and save what the KiCad API reads as the
 reference the tests compare with:
@@ -105,6 +107,13 @@ def j1() -> str:
             "\n\t\t\t(drill 1)"),
         pad("J1", "5", "smd", "roundrect", f"6 -3 {a}", "1.5 1", '"B.Cu" "B.Mask" "B.Paste"',
             "VOUT", "\n\t\t\t(roundrect_rratio 0.25)"),
+        # Not symmetric, on the back and turned off the grid: shows which way a mirrored
+        # pad is turned.
+        pad("J1", "6", "smd", "roundrect", f"-6 -3 {a + 20}", "1.6 0.9",
+            '"B.Cu" "B.Mask" "B.Paste"', "GND",
+            "\n\t\t\t(roundrect_rratio 0)\n\t\t\t(chamfer_ratio 0.3)\n\t\t\t(chamfer top_left)"),
+        pad("J1", "7", "smd", "trapezoid", f"-6 0 {a + 20}", "1.4 1", '"B.Cu" "B.Mask"',
+            "GND", "\n\t\t\t(rect_delta 0 0.4)"),
     ])
     return footprint("J1", "B.Cu", "70 30", a, pads)
 
@@ -293,7 +302,13 @@ def main() -> int:
     v9.write_text(with_numbered_nets(board.read_text(encoding="utf-8")), encoding="utf-8",
                   newline="\n")
     (HERE / "features_v9.kicad_pro").write_text(PROJECT % "features_v9", encoding="utf-8")
-    print(f"Wrote {board} and {v9}")
+    odb = HERE.parent / "odbpp"
+    odb.mkdir(exist_ok=True)
+    for name, extra in (("features.zip", ["--precision", "6"]),
+                        ("features_p2.tgz", ["--compression", "tgz"])):
+        subprocess.run([kicad_cli(), "pcb", "export", "odb", *extra, "-o", str(odb / name),
+                        str(board)], check=True)
+    print(f"Wrote {board}, {v9} and the ODB++ exports in {odb}")
     return 0
 
 

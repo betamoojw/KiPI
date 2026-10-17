@@ -170,7 +170,7 @@
 			(at 0 0 30)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "77dea09a-4325-42e6-94e8-496b6a4188b5")
+			(uuid "557d1b04-3d0e-437b-932b-588b01e06f75")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -181,7 +181,7 @@
 			(at 0 0 30)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "59b60f18-692e-43fb-af33-fda1f115ced8")
+			(uuid "77c65020-d4b5-4278-b3f2-ea0cfacf5d36")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -313,7 +313,7 @@
 			(at 0 0 90)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "b2ec479f-8307-4c5b-a81c-d5c492d0d0ec")
+			(uuid "0a23e1c1-a345-4eb8-b22a-12b0d27ff302")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -324,7 +324,7 @@
 			(at 0 0 90)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "6117a7a3-f846-4ff9-afe3-2f02e1a87ea0")
+			(uuid "88e88d09-3efd-476b-8055-890a84578dea")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -402,6 +402,24 @@
 			(roundrect_rratio 0.25)
 			(net "VOUT")
 			(uuid "d25d6ded-4792-5691-b5a9-826417c18212")
+		)
+		(pad "6" smd roundrect
+			(at -6 -3 110)
+			(size 1.6 0.9)
+			(layers "B.Cu" "B.Mask" "B.Paste")
+			(roundrect_rratio 0)
+			(chamfer_ratio 0.3)
+			(chamfer top_left)
+			(net "GND")
+			(uuid "25140cdc-7b2e-5ad9-9f7e-398559cd85e9")
+		)
+		(pad "7" smd trapezoid
+			(at -6 0 110)
+			(size 1.4 1)
+			(rect_delta 0 0.4)
+			(layers "B.Cu" "B.Mask")
+			(net "GND")
+			(uuid "2c06b8e6-f93b-5b46-820c-09c57e1f8c89")
 		)
 		(embedded_fonts no)
 	)
