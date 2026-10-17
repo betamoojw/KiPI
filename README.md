@@ -470,7 +470,8 @@ tables sort the same way:
 **Export ▾** writes the tables as CSV (including `_pins.csv`, with the voltage and current
 of every pin each rail was solved with, which the HTML report also lists), the 3D
 results as a ParaView `.vtm`, or **Save
-results…** as a `.kipi-results` file (named with the board and the time by default), which the toolbar's **Open results…** reloads without
+results…** as a `.kipi-dc-results` file, or `.kipi-dc-thermal-results` after an
+electro-thermal solve (named with the board and the time by default), which the toolbar's **Open results…** reloads without
 solving again (load the board first). Results files hold JSON and NumPy arrays in a zip:
 they open on any computer and cannot run code, so they are safe to share. The 3D views are
 rebuilt when the file opens. Results saved by KiPI 0.7 and earlier are Python pickles, which

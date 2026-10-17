@@ -246,7 +246,8 @@ class MainWindow(QMainWindow):
 
     def _set_open_results_tip(self):
         self.act_open_results.setToolTip(
-            "Reopen a saved DC power-tree solve (.kipi-results); load the board first"
+            "Reopen a saved DC or DC + thermal solve (.kipi-dc-results, .kipi-dc-thermal-results); "
+            "load the board first"
             if self.mode == "dc" else
             "Reopen saved AC impedance results (.kipi-ac-results); load the board first")
 
@@ -1355,10 +1356,12 @@ class MainWindow(QMainWindow):
         start = str(self._setup_path.parent) if self._setup_path else ""
         try:
             if kind == "results":
+                suffix = report.results_suffix(self._tree)
+                what = "DC + thermal" if suffix == report.THERMAL_RESULTS_SUFFIX else "DC"
                 path, _ = QFileDialog.getSaveFileName(
                     self, "Save results",
-                    str(Path(start) / f"{stamped(self._results_stem())}.kipi-results"),
-                    "KiPI results (*.kipi-results)")
+                    str(Path(start) / f"{stamped(self._results_stem())}{suffix}"),
+                    f"KiPI {what} results (*{suffix})")
                 if path:
                     self._save_results(path)
                 return
@@ -1388,8 +1391,7 @@ class MainWindow(QMainWindow):
             return
         from kipi.dc.pi import report
         start = str(self._setup_path.parent) if self._setup_path else ""
-        path, _ = QFileDialog.getOpenFileName(self, "Open results", start,
-                                              "KiPI results (*.kipi-results)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open results", start, report.OPEN_FILTER)
         if not path:
             return
         legacy = self._allow_legacy_results(path)

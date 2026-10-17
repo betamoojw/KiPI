@@ -152,6 +152,9 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
     the classes results hold, and logs that the format is deprecated. Saving again writes
     the new format.
   - Electro-thermal results save and reopen in the new format too (#50).
+  - DC results files are named for what was solved: `.kipi-dc-results`, or
+    `.kipi-dc-thermal-results` after an electro-thermal solve. **Open results…** in DC mode
+    takes both, and `.kipi-results` files from earlier versions.
 
 ### Internal
 - Board sources are kept apart from the rest of KiPI. `kipi/sources/` holds where boards

@@ -30,6 +30,17 @@ from kipi.core.progress import NULL, ProgressReporter
 from kipi.dc.pi.tree import drop_or_boost
 
 RESULTS_FORMAT = 2          # 2: JSON and arrays (#99); 1: a gzipped pickle
+# The name says what was solved; files before 0.8.0 were all .kipi-results.
+RESULTS_SUFFIX = ".kipi-dc-results"
+THERMAL_RESULTS_SUFFIX = ".kipi-dc-thermal-results"
+LEGACY_RESULTS_SUFFIX = ".kipi-results"
+OPEN_FILTER = (f"KiPI DC results (*{RESULTS_SUFFIX} *{THERMAL_RESULTS_SUFFIX} "
+               f"*{LEGACY_RESULTS_SUFFIX})")
+
+
+def results_suffix(tree) -> str:
+    """The file suffix for ``tree``: DC, or DC with an electro-thermal solve."""
+    return THERMAL_RESULTS_SUFFIX if tree.thermal is not None else RESULTS_SUFFIX
 
 
 # ---------------------------------------------------------------------------

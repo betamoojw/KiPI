@@ -196,18 +196,31 @@ def _idle(app, w):
 def test_results_save_and_open_in_the_background(app, window, monkeypatch, tmp_path):
     from kipi.core import results_io
     tree, first = _solved(app, window, *_bridged_board())
-    path = tmp_path / "r.kipi-results"
-    monkeypatch.setattr("qtpy.QtWidgets.QFileDialog.getSaveFileName",
-                        lambda *a, **k: (str(path), ""))
+    path = tmp_path / "r.kipi-dc-results"
+    offered = []
+
+    def save_as(parent, title, name, filt):
+        offered.append((name, filt))
+        return str(path), ""
+    monkeypatch.setattr("qtpy.QtWidgets.QFileDialog.getSaveFileName", save_as)
     window._export("results")
     _idle(app, window)
     assert path.is_file() and not results_io.is_legacy(path)
+    # The suggested name says what was solved: DC alone here.
+    assert offered[0][0].endswith(".kipi-dc-results") and "DC results" in offered[0][1]
 
     window._tree, window._scenes = None, {}
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: pytest.fail(str(a[2])))
-    monkeypatch.setattr("qtpy.QtWidgets.QFileDialog.getOpenFileName",
-                        lambda *a, **k: (str(path), ""))
+    filters = []
+
+    def open_file(parent, title, start, filt):
+        filters.append(filt)
+        return str(path), ""
+    monkeypatch.setattr("qtpy.QtWidgets.QFileDialog.getOpenFileName", open_file)
     window.open_results()
+    # Both kinds open, and so do results named as before 0.8.0.
+    assert all(f"*{s}" in filters[0] for s in (".kipi-dc-results", ".kipi-dc-thermal-results",
+                                               ".kipi-results"))
     _idle(app, window)
     assert set(window._scenes) == set(tree.groups)        # the 3D views are rebuilt
     assert window.viewer.result is window._scenes[first]

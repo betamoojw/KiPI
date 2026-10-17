@@ -1019,7 +1019,8 @@ scale, a minimum of zero or below falls back to four decades below the maximum.<
     current.</td></tr>
   <tr><td>3D results for ParaView (.vtm)…</td><td class="wrap">The result meshes, for ParaView
     or other VTK tools.</td></tr>
-  <tr><td>Save results…</td><td class="wrap">A <code>.kipi-results</code> file that <b>Open
+  <tr><td>Save results…</td><td class="wrap">A <code>.kipi-dc-results</code> file, or
+    <code>.kipi-dc-thermal-results</code> after an electro-thermal solve, that <b>Open
     results…</b> reloads without solving, named with the board and the time by default. It holds
     JSON and NumPy arrays in a zip, which open on any computer and cannot run code, so it is safe
     to share; the 3D views are rebuilt when it opens.</td></tr>
@@ -1516,9 +1517,13 @@ them a model or confirm they really do not belong on this rail.</p>
     are deprecated: a future KiPI will stop reading them.</td></tr>
   <tr><td><code>*.kipi.json.gz</code></td><td class="wrap">A board snapshot (copper, stackup,
     pads, vias, parts).</td></tr>
-  <tr><td><code>*.kipi-results</code></td><td class="wrap">A saved DC solve: JSON and NumPy
-    arrays in a zip. Files saved by KiPI 0.7 and earlier are Python pickles, which can run
-    code; KiPI asks before it opens one, and they are deprecated.</td></tr>
+  <tr><td><code>*.kipi-dc-results</code></td><td class="wrap">A saved DC solve: JSON and NumPy
+    arrays in a zip.</td></tr>
+  <tr><td><code>*.kipi-dc-thermal-results</code></td><td class="wrap">A saved electro-thermal
+    solve (DC with the board temperature), in the same format.</td></tr>
+  <tr><td><code>*.kipi-results</code></td><td class="wrap">DC results saved by KiPI 0.7 and
+    earlier, as Python pickles, which can run code; KiPI asks before it opens one, and they
+    are deprecated.</td></tr>
   <tr><td><code>*.kipi-ac-results</code></td><td class="wrap">Saved AC results, every rail
     solved, in the same format.</td></tr>
   <tr><td><code>&lt;board&gt;_kipi_report_&lt;date&gt;_&lt;time&gt;.html</code></td><td class="wrap">The DC HTML report.</td></tr>

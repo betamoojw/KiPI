@@ -94,3 +94,11 @@ def test_results_saved_with_the_old_module_paths_still_load(solved, tmp_path):
     assert [l.drop for l in back["tree"].loads] == [l.drop for l in tree.loads]
     name = next(iter(scenes))
     assert type(back["scenes"][name]).__module__ == "kipi.dc.viz.results"
+
+
+def test_results_file_names_say_whether_thermal_was_solved(solved):
+    from kipi.dc.pi.report import results_suffix
+    from kipi.dc.pi.tree import solve_tree
+    snap, s, tree, _ = solved
+    assert results_suffix(tree) == ".kipi-dc-thermal-results"
+    assert results_suffix(solve_tree(snap, setup("ldo"))) == ".kipi-dc-results"
