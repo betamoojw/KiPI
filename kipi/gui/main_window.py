@@ -551,7 +551,7 @@ class MainWindow(QMainWindow):
         refill = self.chk_refill.isChecked()
 
         def work(progress):
-            from kipi.core.kicad_io.extract import connect, extract_board, require_single_kicad
+            from kipi.sources.kicad_ipc.extract import connect, extract_board, require_single_kicad
             require_single_kicad()     # a second KiCad may have been opened since the last load
             if self._board is None:
                 self._kicad, self._board = connect(progress=progress)
@@ -624,7 +624,7 @@ class MainWindow(QMainWindow):
     def _load_layer_colors(self, snap: BoardSnapshot):
         """Color the copper layers like the PCB editor's color theme, read again on every
         load so a theme changed in KiCad shows after Load from KiCad."""
-        from kipi.core.kicad_io.colors import copper_theme
+        from kipi.sources.kicad_ipc.colors import copper_theme
         from kipi.core.viz.meshes import set_layer_colors
         colors, source = copper_theme(snap.kicad_version)
         set_layer_colors(colors)
@@ -841,7 +841,7 @@ class MainWindow(QMainWindow):
         """``(kicad-cli, board file)``, or False (said once per board) if either is
         missing."""
         if self._model_source is None:
-            from kipi.core.kicad_io import models3d
+            from kipi.sources.kicad_ipc import models3d
             if not self._cli_looked:
                 self._cli_looked = True
                 self._kicad_cli = models3d.find_kicad_cli(self._kicad)
@@ -867,7 +867,7 @@ class MainWindow(QMainWindow):
         gen = self._model_gen
 
         def work(progress):
-            from kipi.core.kicad_io.models3d import load_models
+            from kipi.sources.kicad_ipc.models3d import load_models
             from kipi.core.progress import Canceled
             progress.info(f"Loading 3D models of {len(refs)} part(s) with kicad-cli")
             try:

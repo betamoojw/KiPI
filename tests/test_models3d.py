@@ -12,7 +12,7 @@ import pytest
 pytest.importorskip("pyvista")
 
 from glb_writer import TRI  # noqa: E402
-from kipi.core.kicad_io import models3d  # noqa: E402
+from kipi.sources.kicad_ipc import models3d  # noqa: E402
 from kipi.core.model.board import BoardSnapshot, Stackup  # noqa: E402
 from kipi.core.progress import Canceled, ProgressReporter  # noqa: E402
 from kipi.core.viz.glb import Part  # noqa: E402

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def main() -> int:
     from kipi.gui import app as kipi_app
     from kipi.gui.app import run, setup_logging
-    from kipi.core.kicad_io.extract import ExtractionError, connect
+    from kipi.sources.kicad_ipc.extract import ExtractionError, connect
     from kipi.core.progress import ProgressReporter
 
     setup_logging(console=False)

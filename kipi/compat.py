@@ -3,8 +3,8 @@
 Results files are pickles, which name the module of every object they hold. KiPI 0.7.0
 moved its modules into ``kipi.core`` (shared) and ``kipi.dc`` (DC analysis), and 0.8.0
 moved the parts of ``kipi.core.kicad_io`` that are not KiCad-specific into the rest of
-``kipi.core``; the table below maps the old module paths to the new ones so results
-saved before still open.
+``kipi.core`` and the KiCad reader itself to ``kipi.sources.kicad_ipc``; the table below
+maps the old module paths to the new ones so results saved before still open.
 """
 
 from __future__ import annotations
@@ -16,13 +16,14 @@ from typing import Tuple
 _MOVED_MODULES = (
     ("kipi.core.kicad_io.snapshot", "kipi.core.model.snapshot_io"),
     ("kipi.kicad_io.snapshot", "kipi.core.model.snapshot_io"),
+    ("kipi.core.kicad_io", "kipi.sources.kicad_ipc"),
     ("kipi.solver.direct", "kipi.core.solver.direct"),
     ("kipi.viz.results", "kipi.dc.viz.results"),
     ("kipi.viz", "kipi.core.viz"),
     ("kipi.gui.pi_panel", "kipi.dc.gui.pi_panel"),
     ("kipi.progress", "kipi.core.progress"),
     ("kipi.model", "kipi.core.model"),
-    ("kipi.kicad_io", "kipi.core.kicad_io"),
+    ("kipi.kicad_io", "kipi.sources.kicad_ipc"),
     ("kipi.geometry", "kipi.core.geometry"),
     ("kipi.mesh", "kipi.core.mesh"),
     ("kipi.solver", "kipi.dc.solver"),

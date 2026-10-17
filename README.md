@@ -493,13 +493,14 @@ The tests also solve the example board and check that its committed setup still 
 |---|---|
 | `kipi_entry.py`, `plugin.json` | KiCad IPC plugin action |
 | `kipi/core/` | Shared by every analysis; no Qt and no analysis-specific physics: |
-| `kipi/core/kicad_io/` | kipy → `BoardSnapshot` extraction, JSON snapshot save/load |
-| `kipi/core/model/` | Toolkit-independent board model, power-net heuristics |
-| `kipi/core/geometry/` | Per-net, per-layer copper union (shapely) |
+| `kipi/core/model/` | Toolkit-independent board model, copper layer ids, stackup building, JSON snapshot save/load, power-net heuristics |
+| `kipi/core/geometry/` | Per-net, per-layer copper union (shapely), arc discretization |
 | `kipi/core/mesh/` | Conforming per-layer triangle mesh (Triangle), graded around plated holes |
 | `kipi/core/solver/` | Sparse linear algebra: direct backends (PARDISO / SuperLU), direct or AMG-CG SPD solver |
-| `kipi/core/viz/` | PyVista copper meshes and batching (no Qt) |
+| `kipi/core/viz/` | PyVista copper meshes and batching, default layer colors (no Qt) |
 | `kipi/core/progress.py` | Progress/log reporting used by every pipeline stage |
+| `kipi/sources/` | Where boards come from, each producing a `BoardSnapshot`; nothing else in KiPI imports kipy: |
+| `kipi/sources/kicad_ipc/` | The running KiCad, through the IPC API (kipy): board extraction, zone refill, KiCad instance checks, color theme, 3D models through kicad-cli |
 | `kipi/dc/` | DC analysis: |
 | `kipi/dc/solver/` | 2.5D DC conduction FEM: sheet conductance, via/PTH barrels, series parts, sources, loads |
 | `kipi/dc/pi/` | User power-tree setup (VRMs, loads, series links), JSON, validation, the guesses that pre-fill it, tree solver, results tables |

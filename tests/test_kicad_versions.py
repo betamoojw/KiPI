@@ -17,7 +17,7 @@ from shapely.geometry import box  # noqa: E402
 
 from kicad_fake import VERSIONS, FakeKiCad, parse  # noqa: E402
 from kipi.core.geometry.copper import drill_holes  # noqa: E402
-from kipi.core.kicad_io.extract import (  # noqa: E402
+from kipi.sources.kicad_ipc.extract import (  # noqa: E402
     _PAD_TYPES, _VIA_TYPES, extract_board, refill_and_wait,
 )
 from kipi.core.model.snapshot_io import from_dict, to_dict  # noqa: E402
@@ -148,7 +148,7 @@ def test_kicad_enum_values_match():
 def test_old_kicad_is_named_in_the_log(version, warned):
     from types import SimpleNamespace as NS
 
-    from kipi.core.kicad_io.extract import _warn_old_kicad
+    from kipi.sources.kicad_ipc.extract import _warn_old_kicad
 
     said = []
     major, minor, patch = parse(version)

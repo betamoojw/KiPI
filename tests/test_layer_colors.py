@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from kipi.core.kicad_io import colors
+from kipi.sources.kicad_ipc import colors
 from kipi.core.model.board import CopperLayer
 from kipi.core.viz import layer_colors
 

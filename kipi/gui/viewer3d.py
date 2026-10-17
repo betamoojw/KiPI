@@ -273,7 +273,7 @@ class Viewer3D(QWidget):
         """Draw these part models (ref -> (mesh, "top" or "bottom")) in place of any shown.
 
         Meshes are in the view's frame at true height (see
-        :func:`kipi.core.kicad_io.models3d.to_mesh`). The Z scale stretches the board but
+        :func:`kipi.sources.kicad_ipc.models3d.to_mesh`). The Z scale stretches the board but
         not the parts: the top side's parts are lifted to sit on the stretched board.
         """
         if (models.keys() == self._models.keys() and board_top_mm == self._board_top

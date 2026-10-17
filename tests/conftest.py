@@ -6,7 +6,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def no_kicad_settings(monkeypatch):
     """Tests never read this machine's KiCad color theme."""
-    from kipi.core.kicad_io import colors
+    from kipi.sources.kicad_ipc import colors
     monkeypatch.setattr(colors, "_config_roots", lambda: [])
 
 

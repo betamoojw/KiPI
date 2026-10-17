@@ -25,7 +25,7 @@ def main(argv=None) -> int:
     setup_logging(logging.DEBUG if args.debug else logging.INFO)
 
     if args.dump:
-        from kipi.core.kicad_io.extract import connect, extract_board
+        from kipi.sources.kicad_ipc.extract import connect, extract_board
         from kipi.core.model.snapshot_io import save
         from kipi.core.progress import ProgressReporter
         prog = ProgressReporter()
@@ -53,7 +53,7 @@ def main(argv=None) -> int:
 
 def _run_live(instance) -> int:
     from kipi.gui.app import run
-    from kipi.core.kicad_io.extract import ExtractionError, connect
+    from kipi.sources.kicad_ipc.extract import ExtractionError, connect
     from kipi.core.progress import ProgressReporter
     try:
         kicad, board = connect(progress=ProgressReporter())

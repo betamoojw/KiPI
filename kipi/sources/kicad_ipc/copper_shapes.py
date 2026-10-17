@@ -16,7 +16,7 @@ from typing import Iterable, List, Optional, Sequence
 
 from kipi.core.geometry.arcs import arc_points
 from kipi.core.geometry.copper import shapely_to_polys
-from kipi.core.kicad_io.convert import mm, poly, pt
+from kipi.sources.kicad_ipc.convert import mm, poly, pt
 from kipi.core.model.board import Zone
 from kipi.core.progress import ProgressReporter
 

@@ -12,8 +12,8 @@ from typing import Dict, Iterable, List, Optional
 
 from kipi.core.geometry.arcs import arc_points
 from kipi.core.geometry.copper import shapely_to_polys
-from kipi.core.kicad_io.convert import mm, poly, pt
-from kipi.core.kicad_io.copper_shapes import copper_shape_zones
+from kipi.sources.kicad_ipc.convert import mm, poly, pt
+from kipi.sources.kicad_ipc.copper_shapes import copper_shape_zones
 from kipi.core.model.board import (
     BoardSnapshot, Footprint, Net, Pad, Poly, Stackup, Track, Via, Zone,
 )
@@ -65,7 +65,7 @@ def connect(timeout_ms: int = 5000, retries: int = 3, progress: ProgressReporter
 
 def require_single_kicad() -> None:
     """Raise :class:`ExtractionError` if this user has more than one KiCad open."""
-    from kipi.core.kicad_io.instances import multiple_kicads_message
+    from kipi.sources.kicad_ipc.instances import multiple_kicads_message
     message = multiple_kicads_message()
     if message:
         raise ExtractionError(message)
