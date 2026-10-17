@@ -89,20 +89,64 @@ def dc_volts(snap: BoardSnapshot, dc_result, caps: List[tuple]) -> Dict[str, flo
     return out
 
 
-def apply_derating(ports, setup, vrm, volts: Dict[str, float]
+def temperature_source(setup, dc_result):
+    """How the AC solve sees temperature (#77): (copper temperature function of KiCad xy, or
+    None when temperature is not modeled; a description for the log; a warning or "")."""
+    s = setup.ac
+    if s.temperature not in ("fixed", "thermal"):
+        return None, "", ""
+    fixed = float(s.temperature_c)
+
+    def flat(xy):
+        return np.full(len(np.atleast_2d(xy)), fixed)
+    if s.temperature == "fixed":
+        return flat, f"{fixed:g} °C", ""
+    thermal = getattr(dc_result, "thermal", None) if dc_result is not None else None
+    if thermal is None:
+        return flat, f"{fixed:g} °C", (f"No DC thermal co-simulation to take temperatures "
+                                      f"from: solve DC with thermal co-simulation, or open "
+                                      f"its results, first. Using {fixed:g} °C.")
+    sampler = thermal.sampler()
+
+    def warm(xy):
+        t = np.asarray(sampler(np.atleast_2d(xy)), dtype=float).ravel()
+        return np.where(np.isfinite(t), t, fixed)
+    return warm, "the DC thermal co-simulation's temperatures", ""
+
+
+def part_temperatures(snap: BoardSnapshot, ports, temperature) -> Dict[str, float]:
+    """Each capacitor port's temperature: at the middle of its pads."""
+    if temperature is None:
+        return {}
+    pos = {p.id: p.position for p in snap.pads}
+    names, xy = [], []
+    for port in ports:
+        pts = [pos[i] for i in (*port.plus_pads, *port.minus_pads) if i in pos]
+        if port.kind == "cap" and pts:
+            names.append(port.name)
+            xy.append(np.mean(pts, axis=0))
+    if not names:
+        return {}
+    return dict(zip(names, (float(t) for t in temperature(np.array(xy)))))
+
+
+def apply_derating(ports, setup, vrm, volts: Dict[str, float],
+                   temps: Optional[Dict[str, float]] = None, temp_text: str = ""
                    ) -> Tuple[Dict[str, Tuple[Optional[float], float]], List[str]]:
     """Derate the capacitor ports, in place, for DC bias (models that estimate it, at the
-    voltage across each part: ``volts``, else the VRM's set point) and aging (#109, models
-    with a dielectric, when the sweep settings age them). Each derated part gets its own
-    copy of its model.
+    voltage across each part: ``volts``, else the VRM's set point), aging (#109, models
+    with a dielectric, when the sweep settings age them) and temperature (#77, models with
+    a dielectric, at ``temps``: °C by reference, described by ``temp_text``). Each derated
+    part gets its own copy of its model.
 
     Returns {reference: (DC volts or None, farads)} for the parts derated, and notes for
     the log.
     """
     s = setup.ac
     hours = s.aging_hours if s.aging else None
+    temps = temps or {}
     out: Dict[str, Tuple[Optional[float], float]] = {}
-    n_bias = from_dc = n_aged = 0
+    n_bias = from_dc = n_aged = n_temp = 0
     kept: List[float] = []
     for port in ports:
         m = port.element
@@ -110,7 +154,9 @@ def apply_derating(ports, setup, vrm, volts: Dict[str, float]
             continue
         biased = s.dc_bias and m.dc_bias and bool(m.rated_v)
         aged = m.aged(hours) < 1.0
-        if not (biased or aged):
+        t = temps.get(port.name)
+        warmed = t is not None and m.at_temperature(t) != 1.0
+        if not (biased or aged or warmed):
             continue
         v = None
         if biased:
@@ -119,7 +165,8 @@ def apply_derating(ports, setup, vrm, volts: Dict[str, float]
             from_dc += v is not None
             v = abs(vrm.voltage) if v is None else v
         n_aged += aged
-        c = m.capacitance_at(v or 0.0, hours)
+        n_temp += warmed
+        c = m.capacitance_at(v or 0.0, hours, t)
         port.element = replace(m, capacitance_f=c)
         out[port.name] = (v, c)
         kept.append(c / m.capacitance_f if m.capacitance_f else 1.0)
@@ -138,6 +185,12 @@ def apply_derating(ports, setup, vrm, volts: Dict[str, float]
             what.append(f"{n_bias} for DC bias at {where}")
         if n_aged:
             what.append(f"{n_aged} aged {hours:g} hours")
+        if n_temp:
+            ts = [temps[r] for r in out if r in temps]
+            span = (f"{min(ts):.3g} °C" if max(ts) - min(ts) < 0.05
+                    else f"{min(ts):.3g} to {max(ts):.3g} °C")
+            what.append(f"{n_temp} at {temp_text or 'temperature'} ({span})"
+                        if temp_text and "°C" not in temp_text else f"{n_temp} at {span}")
         lo, hi = min(kept), max(kept)
         span = f"{lo:.0%}" if hi - lo < 0.005 else f"{lo:.0%} to {hi:.0%}"
         notes.append(f"Capacitors derated: {'; '.join(what)}. They keep {span} of their "

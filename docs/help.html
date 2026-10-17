@@ -1121,7 +1121,10 @@ are required.</p>
   <tr><td>Voltage rating</td><td class="wrap">The part's rated DC voltage, which the estimate
     is scaled by. Needed when Estimate DC bias is ticked.</td></tr>
   <tr><td>Dielectric</td><td class="wrap">The ceramic dielectric (C0G, X7R, X5R, Y5V…), for
-    aging. Picking one fills in its typical aging rate. Leave it unset for polymer and
+    aging and temperature. Picking one fills in its typical aging rate, and with a
+    <b>Temperature</b> in the Sweep tab the capacitance follows the dielectric's typical
+    curve from its rated value at 25 °C (X7R: −4 % at 85 °C and −12 % at 125 °C; Y5V: −75 %
+    at 85 °C; C0G: flat). Leave it unset for polymer and
     electrolytic parts, which are then not aged. <b>Models from values</b> reads it from the
     value (<code>NP0</code> counts as C0G).</td></tr>
   <tr><td>Aging</td><td class="wrap">Capacitance lost per decade of hours operated, in % (X7R
@@ -1237,6 +1240,15 @@ Distribution System Design Methodology and Capacitor Selection for Modern CMOS T
   <tr><td>Capacitor DC bias</td><td class="wrap">Ticked (the default), the capacitor models
     with <b>Estimate DC bias</b> are derated by the DC voltage across each part. Untick it to
     solve with every model's capacitance as entered.</td></tr>
+  <tr><td>Temperature</td><td class="wrap"><i>Not modeled</i> (the default): copper at 20 °C
+    and capacitors at their rated values. <i>Fixed</i>: the whole board at <b>Board
+    temperature</b>. <i>From DC thermal co-simulation</i>: each copper triangle and capacitor
+    at the temperature the last DC solve with thermal co-simulation found there; DC results
+    opened from a file work too. Without one, the AC solve uses the Board temperature and
+    says so. The copper's resistivity follows its temperature coefficient (from the DC
+    settings), and models with a dielectric follow its temperature curve.</td></tr>
+  <tr><td>Board temperature</td><td class="wrap">The temperature when Fixed, and where the
+    thermal co-simulation gives none.</td></tr>
   <tr><td>Capacitor aging</td><td class="wrap">Ticked, every capacitor model with a dielectric
     loses its aging rate for each decade of <b>Hours operated</b> past 1000 hours (the
     usual reference age of the rated capacitance): an X7R part at 2 %/decade keeps 96 % after

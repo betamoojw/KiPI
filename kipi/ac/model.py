@@ -26,6 +26,24 @@ DEFAULT_AGING_HOURS = 87600.0           # ten years
 AGING_PCT_PER_DECADE = {"C0G": 0.0, "X8R": 2.0, "X7R": 2.0, "X7S": 2.5, "X7T": 2.5,
                         "X6S": 3.0, "X5R": 3.0, "Z5U": 5.0, "Y5V": 7.0}
 
+# Temperature (#77): a typical part's capacitance change (%) against temperature (°C) for
+# each dielectric, from its rated value at 25 °C, joined by straight lines and held flat
+# past the ends. Parts differ; the datasheet's curve is better.
+CAP_REF_TEMP_C = 25.0
+TEMP_CURVES = {
+    "C0G": [(-55.0, 0.0), (125.0, 0.0)],
+    "X5R": [(-55.0, -10.0), (-25.0, -4.0), (25.0, 0.0), (85.0, -8.0)],
+    "X6S": [(-55.0, -12.0), (25.0, 0.0), (105.0, -15.0)],
+    "X7R": [(-55.0, -10.0), (-25.0, -4.0), (25.0, 0.0), (85.0, -4.0), (125.0, -12.0)],
+    "X7S": [(-55.0, -12.0), (25.0, 0.0), (85.0, -6.0), (125.0, -18.0)],
+    "X7T": [(-55.0, -15.0), (25.0, 0.0), (85.0, -10.0), (125.0, -28.0)],
+    "X8R": [(-55.0, -10.0), (25.0, 0.0), (125.0, -6.0), (150.0, -14.0)],
+    "Z5U": [(10.0, -15.0), (25.0, 0.0), (85.0, -50.0)],
+    "Y5V": [(-30.0, -70.0), (0.0, -25.0), (15.0, 0.0), (25.0, 0.0), (50.0, -30.0),
+            (85.0, -75.0)],
+}
+TEMPERATURE_SOURCES = ("none", "fixed", "thermal")
+
 if TYPE_CHECKING:                       # PinRef lives in the setup model, which imports us
     from kipi.dc.pi.model import PinRef
 
@@ -46,16 +64,27 @@ class CapModel:
     dielectric: str = ""
     aging_pct_per_decade: float = 0.0
 
-    def capacitance_at(self, volts: float, hours: Optional[float] = None) -> float:
+    def capacitance_at(self, volts: float, hours: Optional[float] = None,
+                       temp_c: Optional[float] = None) -> float:
         """One part's capacitance with ``volts`` DC across it after ``hours`` of operation
-        (None: not aged): derated when the model estimates DC bias and has a rating, and
-        aged when it has a dielectric; else its capacitance as entered."""
-        c = self.capacitance_f * self.aged(hours)
+        (None: not aged) at ``temp_c`` (None: 25 °C): derated when the model estimates DC
+        bias and has a rating, and aged and moved with temperature when it has a
+        dielectric; else its capacitance as entered."""
+        c = self.capacitance_f * self.aged(hours) * self.at_temperature(temp_c)
         if not (self.dc_bias and self.rated_v and self.rated_v > 0 and volts):
             return c
         kept = min(max(self.kept_at_rated_pct, 1.0), 100.0) / 100.0
         k = 1.0 / kept - 1.0
         return c / (1.0 + k * (abs(volts) / self.rated_v) ** BIAS_EXP)
+
+    def at_temperature(self, temp_c: Optional[float]) -> float:
+        """The share of its 25 °C capacitance the part has at ``temp_c``."""
+        curve = TEMP_CURVES.get(self.dielectric)
+        if curve is None or temp_c is None:
+            return 1.0
+        import numpy as np
+        ts, pct = zip(*curve)
+        return max(1.0 + float(np.interp(temp_c, ts, pct)) / 100.0, 0.0)
 
     def aged(self, hours: Optional[float]) -> float:
         """The share of its capacitance the part keeps after ``hours`` of aging."""
@@ -120,6 +149,11 @@ class ACSettings:
     # Age the capacitor models that have a dielectric (#109) by this many hours.
     aging: bool = False
     aging_hours: float = DEFAULT_AGING_HOURS
+    # Temperature (#77): "none" (copper at the DC settings' reference temperature and the
+    # capacitors at 25 °C), "fixed" (everything at temperature_c) or "thermal" (the last
+    # DC thermal co-simulation's copper temperatures, temperature_c where it has none).
+    temperature: str = "none"
+    temperature_c: float = 25.0
 
     def frequencies(self):
         import numpy as np

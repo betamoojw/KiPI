@@ -506,7 +506,8 @@ series links with DC mode (fields only DC mode uses are grayed out) and adds:
   reads the rating from values such as `10uF 6.3V X5R` and ticks the box for class II
   dielectrics.
   A model's **Dielectric** (X7R, X5R, Y5V…) fills in its typical **Aging** rate, in % of
-  capacitance lost per decade of hours; enter the datasheet's rate if it gives one.
+  capacitance lost per decade of hours (enter the datasheet's rate if it gives one), and
+  gives its capacitance a typical temperature curve.
   **Models from values** reads the dielectric from the value too.
 * **Probes tab**: Defines where to plot the PDN impedance, usually a device's supply and ground
   pins. Each probe has a target impedance and frequency range: **flat** (an impedance up to a frequency) or **custom**, a
@@ -525,6 +526,10 @@ series links with DC mode (fields only DC mode uses are grayed out) and adds:
   ages every model with a dielectric by the **Hours operated** (ten years by default; type
   them, or drag the slider that shows while aging is ticked), on top
   of its DC bias: each loses its aging rate per decade of hours past 1000 hours.
+  **Temperature** sets the copper's resistivity and the capacitance of models with a
+  dielectric: **Fixed** at one board temperature, or **From DC thermal co-simulation**, the
+  copper temperatures of the last DC solve with thermal co-simulation (or of DC results
+  opened from a file).
 * **Mesh tab**: mesh size, minimum edge at plated holes (which sets the via inductance),
   dielectric loss tangent and default εr.
 

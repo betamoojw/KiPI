@@ -419,6 +419,7 @@ def write_ac_report(path, result, snap: BoardSnapshot, setup, progress=None) -> 
                        f"{dielectric_summary(snap.stackup, s.default_er)}"],
         ["Copper", f"resistivity {setup.settings.rho_ohm_mm * 1e-3:.4g} Ω·m, barrel plating "
                    f"{setup.settings.plating_mm * 1000:g} µm"],
+        ["Temperature", _temperature_text(s, st)],
     ]))
     times = ", ".join(f"{k} {v:.1f} s" for k, v in st.times.items())
     parts.append("<h3>Solver</h3>" + _table(["Quantity", "Value"], [
@@ -447,6 +448,18 @@ def write_ac_report(path, result, snap: BoardSnapshot, setup, progress=None) -> 
     path.write_text(doc, encoding="utf-8")
     info(f"Report written: {path} ({path.stat().st_size / 1e6:.1f} MB)")
     return path
+
+
+def _temperature_text(s, st) -> str:
+    """How the solve took temperature (#77), for the settings table."""
+    t = getattr(st, "t_copper", None)
+    if getattr(s, "temperature", "none") == "none" or t is None:
+        return "not modeled: copper at 20 °C, capacitors at their rated values"
+    span = f"{t[0]:.3g} °C" if t[1] - t[0] < 0.05 else f"{t[0]:.3g} to {t[1]:.3g} °C"
+    where = ("from the DC thermal co-simulation" if s.temperature == "thermal"
+             and t[1] - t[0] >= 0.05 else "fixed")
+    return (f"{span} ({where}): copper resistivity and capacitors with a dielectric "
+            "follow it")
 
 
 def _bias_text(m, at: list) -> str:

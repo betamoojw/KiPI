@@ -83,7 +83,7 @@ class CapEditor(_Editor):
         f.addRow("Voltage rating", self.rated)
         f.addRow("Kept at rating", self.kept)
         self.dielectric = QComboBox()
-        self.dielectric.addItem("not set (not aged)", "")
+        self.dielectric.addItem("not set", "")
         for d in AGING_PCT_PER_DECADE:
             self.dielectric.addItem(d, d)
         self.aging = _spin(0, 50, 0, 2, " %/decade", 0.5)
@@ -105,10 +105,12 @@ class CapEditor(_Editor):
                             "voltage, from the datasheet's DC bias curve (typically 30 to "
                             "50 %; smaller cases lose more). The curve is shaped like a "
                             "typical X5R/X7R part's."),
-                (self.dielectric, "The ceramic dielectric, for aging: with Capacitor aging "
-                                  "ticked in the Sweep tab, a model with a dielectric loses "
+                (self.dielectric, "The ceramic dielectric, for aging and temperature. With "
+                                  "Capacitor aging ticked in the Sweep tab, the model loses "
                                   "its aging rate for every decade of hours operated past "
-                                  "1000. Leave it unset for polymer and electrolytic parts."),
+                                  "1000; with a Temperature there, its capacitance follows "
+                                  "the dielectric's typical temperature curve. Leave it unset "
+                                  "for polymer and electrolytic parts."),
                 (self.aging, "Capacitance lost per decade of hours (e.g. from 1000 to 10000 "
                              "hours). Picking a dielectric fills in its typical rate; the "
                              "datasheet's is better."),
@@ -573,7 +575,8 @@ class ACPanel(QWidget):
                 "RLC models for the decoupling capacitors, and which parts use each",
                 "Where the impedance is looked into (usually a device's power pins), "
                 "with its target",
-                "Frequency range and resolution of the sweep, and capacitor DC bias and aging",
+                "Frequency range and resolution of the sweep; capacitor DC bias, "
+                "temperature and aging",
                 "Mesh density and dielectric losses for the AC field solve")):
             self.tabs.setTabToolTip(i, text)
         for il in self._lists():
@@ -695,6 +698,25 @@ class ACPanel(QWidget):
                               "or else the rail's VRM set point). Untick to solve with every "
                               "model's capacitance as entered.")
         self.chk_bias.toggled.connect(self._ac_settings_changed)
+        self.cmb_temp = QComboBox()
+        for text, key in (("Not modeled", "none"), ("Fixed", "fixed"),
+                          ("From DC thermal co-simulation", "thermal")):
+            self.cmb_temp.addItem(text, key)
+        self.cmb_temp.setCurrentIndex(max(self.cmb_temp.findData(s.temperature), 0))
+        self.spin_temp = _spin(-55, 200, s.temperature_c, 1, " °C", 5)
+        f.addRow("Temperature", self.cmb_temp)
+        f.addRow("Board temperature", self.spin_temp)
+        tip(f, self.cmb_temp, "The temperature of the copper (its resistivity) and of the "
+                              "capacitors with a dielectric (their capacitance). Fixed: one "
+                              "temperature for the whole board. From DC thermal "
+                              "co-simulation: the copper temperatures of the last DC solve "
+                              "with thermal co-simulation, or of DC results opened from a "
+                              "file. Not modeled: copper at 20 °C and capacitors at their "
+                              "rated values.")
+        tip(f, self.spin_temp, "The board's temperature when Fixed, and where the thermal "
+                               "co-simulation has none")
+        self.cmb_temp.currentIndexChanged.connect(self._ac_settings_changed)
+        self.spin_temp.valueChanged.connect(self._ac_settings_changed)
         self.chk_aging = QCheckBox("Capacitor aging")
         self.chk_aging.setChecked(s.aging)
         self.spin_hours = _spin(1, 1e7, s.aging_hours, 0, " h", 1000)
@@ -725,6 +747,7 @@ class ACPanel(QWidget):
         self.sld_hours.valueChanged.connect(self._hours_slid)
         self._sync_hours_slider()
         self._show_aging(s.aging)
+        self.spin_temp.setEnabled(s.temperature != "none")
         return w
 
     def _show_aging(self, on: bool):
@@ -796,6 +819,9 @@ class ACPanel(QWidget):
         s.dc_bias = self.chk_bias.isChecked()
         s.aging = self.chk_aging.isChecked()
         s.aging_hours = self.spin_hours.value()
+        s.temperature = self.cmb_temp.currentData() or "none"
+        s.temperature_c = self.spin_temp.value()
+        self.spin_temp.setEnabled(s.temperature != "none")
         self._on_changed()
 
     def _load_ac_settings(self):
@@ -805,7 +831,8 @@ class ACPanel(QWidget):
                        (self.spin_fpd, s.field_points_per_decade),
                        (self.spin_edge, s.max_edge_mm), (self.spin_grading, s.grading),
                        (self.spin_min_edge, s.min_edge_mm), (self.spin_tand, s.loss_tangent),
-                       (self.spin_er, s.default_er), (self.spin_hours, s.aging_hours)):
+                       (self.spin_er, s.default_er), (self.spin_hours, s.aging_hours),
+                       (self.spin_temp, s.temperature_c)):
             wdg.blockSignals(True)
             wdg.setValue(v)
             wdg.blockSignals(False)
@@ -816,6 +843,10 @@ class ACPanel(QWidget):
             chk.blockSignals(False)
         self._sync_hours_slider()
         self._show_aging(s.aging)
+        self.cmb_temp.blockSignals(True)
+        self.cmb_temp.setCurrentIndex(max(self.cmb_temp.findData(s.temperature), 0))
+        self.cmb_temp.blockSignals(False)
+        self.spin_temp.setEnabled(s.temperature != "none")
 
     # ------------------------------------------------------------------ data
     def nets(self) -> List[str]:

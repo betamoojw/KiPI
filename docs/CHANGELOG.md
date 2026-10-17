@@ -130,6 +130,12 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
   slider, shown in years), on top of its DC bias. **Models from
   values** reads the dielectric from the value, and the Results notes and HTML report show
   the derated capacitance.
+- AC solves at a **temperature** (#77). **Temperature** in the Sweep tab sets the copper's
+  resistivity (by its temperature coefficient, with skin effect) and the capacitance of
+  models with a dielectric (by a typical curve for each dielectric): **Fixed** at one board
+  temperature, or **From DC thermal co-simulation**, from the copper temperatures of the
+  last DC solve with thermal co-simulation or of DC results opened from a file. The Results
+  notes and the HTML report give the temperatures used.
 
 ### Changed
 - `python -m kipi` with no arguments starts standalone instead of connecting to the running
