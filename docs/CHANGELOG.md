@@ -95,6 +95,8 @@ First milestone of running KiPI on its own, outside KiCad (#45). The plugin work
 - `kicad-python` is now the `kicad` extra of the Python package
   (`pip install -e "<KiPI folder>[kicad]"`), since standalone KiPI does not need it. `requirements.txt`, which KiCad installs for the
   plugin, still includes it.
+- The Airflow tooltip and help say the air flows parallel to the board in a fixed direction,
+  cooling every point equally (#98).
 
 ### Internal
 - Board sources are kept apart from the rest of KiPI. `kipi/sources/` holds where boards

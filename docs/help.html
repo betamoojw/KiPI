@@ -845,6 +845,9 @@ copper becoming more resistive. KiPI alternates electrical and thermal solves.</
   <tr><td>Iterations</td><td class="wrap">Electrical/thermal passes. Three is usually enough;
     the Thermal results tab shows how much each changed.</td></tr>
   <tr><td>Airflow</td><td class="wrap">Air speed over both faces, m/s; 0 is still air.
+    The air always flows parallel to the board, along both faces, and its direction is fixed:
+    every point is cooled equally, as if the air stayed at ambient across the whole board, so
+    upstream parts do not warm the air that reaches downstream ones.
     Convection is h = 10 + 3.8·v W/m²K per face.</td></tr>
   <tr><td>Grid</td><td class="wrap">Thermal cell size; <i>auto</i> is about 250 cells across
     the board.</td></tr>

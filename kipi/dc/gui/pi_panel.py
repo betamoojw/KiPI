@@ -1392,8 +1392,11 @@ class PIPanel(QWidget):
         tip(f, self.spin_ambient, "Temperature of the air around the board")
         tip(f, self.spin_iters, "Electrical and thermal solves to alternate. Three is usually "
                                 "enough; the Notes tab shows how much each one changed.")
-        tip(f, self.spin_airflow, "Air speed over both faces of the board. Faster air cools "
-                                  "it more.")
+        tip(f, self.spin_airflow, "Air speed over both faces of the board. The air always "
+                                  "flows parallel to the board, along its surface, not onto "
+                                  "it, and its direction cannot be set: the model cools every "
+                                  "point equally, as if the air stayed at ambient all the way "
+                                  "across. Faster air cools the board more.")
         tip(f, self.spin_tgrid, "Cell size of the thermal grid. 'Auto' gives about 250 cells "
                                 "across the board.")
         tip(f, self.spin_lam_k, self.spin_lam_k.toolTip())
